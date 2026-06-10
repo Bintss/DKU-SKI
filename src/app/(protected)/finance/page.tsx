@@ -21,37 +21,23 @@ export default function FinancePage() {
 
   useEffect(() => {
     const fetchFinance = async () => {
-  setLoading(true)
-
-  const { data: { user } } = await supabase.auth.getUser()
-  console.log('현재 유저:', user)
-
-  const { data, error } = await supabase
-    .from('finance')
-    .select('*')
-    .eq('season', '2026-27')
-    .order('date', { ascending: false })
-
-  console.log('data:', data)
-  console.log('error:', error)
-  setRecords(data ?? [])
-  setLoading(false)
-}
+      setLoading(true)
+      const { data } = await supabase
+        .from('finance')
+        .select('*')
+        .eq('season', season)
+        .order('date', { ascending: false })
+      setRecords(data ?? [])
+      setLoading(false)
+    }
     fetchFinance()
   }, [season])
 
-  const totalIncome = records
-    .filter(r => r.type === 'income')
-    .reduce((sum, r) => sum + r.amount, 0)
-
-  const totalExpense = records
-    .filter(r => r.type === 'expense')
-    .reduce((sum, r) => sum + Math.abs(r.amount), 0)
-
+  const totalIncome = records.filter(r => r.type === 'income').reduce((s, r) => s + r.amount, 0)
+  const totalExpense = records.filter(r => r.type === 'expense').reduce((s, r) => s + Math.abs(r.amount), 0)
   const balance = totalIncome - totalExpense
 
-  const formatAmount = (n: number) =>
-    new Intl.NumberFormat('ko-KR').format(Math.abs(n)) + '원'
+  const fmt = (n: number) => new Intl.NumberFormat('ko-KR').format(Math.abs(n)) + '원'
 
   const categoryExpense = records
     .filter(r => r.type === 'expense')
@@ -62,93 +48,106 @@ export default function FinancePage() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-400 text-sm">불러오는 중...</p>
+      <p className="text-sm text-gray-400">불러오는 중...</p>
     </div>
   )
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-10">
+    <main className="max-w-lg mx-auto px-4 pb-10">
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold">재무 공시</h1>
-          <p className="text-xs text-gray-400 mt-0.5">구글 시트 자동 연동</p>
-        </div>
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-lg font-semibold text-gray-900">재무 공시</h1>
         <select
-            value={season}
-            onChange={e => setSeason(e.target.value)}
-            className="text-sm border rounded-lg px-3 py-2 outline-none"
-        >   
-          <option value="2026-27">2026-27 시즌</option>
-          <option value="2025-26">2025-26 시즌</option>
+          value={season}
+          onChange={e => setSeason(e.target.value)}
+          className="text-sm border rounded-xl px-3 py-2 outline-none bg-white"
+        >
+          <option value="2026-27">2026-27</option>
+          <option value="2025-26">2025-26</option>
         </select>
       </div>
 
-      {/* 요약 카드 3개 */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-gray-50 rounded-xl px-4 py-4">
-          <p className="text-xs text-gray-400 mb-1">총 수입</p>
-          <p className="text-base font-semibold text-blue-600">{formatAmount(totalIncome)}</p>
-        </div>
-        <div className="bg-gray-50 rounded-xl px-4 py-4">
-          <p className="text-xs text-gray-400 mb-1">총 지출</p>
-          <p className="text-base font-semibold text-red-500">{formatAmount(totalExpense)}</p>
-        </div>
-        <div className="bg-gray-50 rounded-xl px-4 py-4">
-          <p className="text-xs text-gray-400 mb-1">잔액</p>
-          <p className={`text-base font-semibold ${balance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-            {formatAmount(balance)}
-          </p>
+      {/* 요약 카드 */}
+      <div className="rounded-2xl p-5 mb-5 text-white"
+        style={{ background: 'linear-gradient(135deg, var(--ski-blue) 0%, var(--ski-blue-light) 100%)' }}
+      >
+        <p className="text-blue-200 text-xs mb-3">{season} 시즌</p>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <p className="text-blue-200 text-xs mb-1">총 수입</p>
+            <p className="text-base font-bold">{(totalIncome / 10000).toFixed(0)}만원</p>
+          </div>
+          <div>
+            <p className="text-blue-200 text-xs mb-1">총 지출</p>
+            <p className="text-base font-bold">{(totalExpense / 10000).toFixed(0)}만원</p>
+          </div>
+          <div>
+            <p className="text-blue-200 text-xs mb-1">잔액</p>
+            <p className={`text-base font-bold ${balance >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+              {(balance / 10000).toFixed(0)}만원
+            </p>
+          </div>
         </div>
       </div>
 
       {/* 항목별 지출 */}
-      <div className="mb-6">
-        <h2 className="text-sm font-medium text-gray-500 mb-3">항목별 지출</h2>
-        <div className="flex flex-col gap-2">
-          {Object.entries(categoryExpense).map(([cat, amount]) => (
-            <div key={cat}>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600">{cat}</span>
-                <span className="font-medium">{formatAmount(amount)}</span>
-              </div>
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-500 rounded-full"
-                  style={{ width: `${(amount / totalExpense) * 100}%` }}
-                />
-              </div>
-            </div>
-          ))}
+      {Object.keys(categoryExpense).length > 0 && (
+        <div className="bg-white rounded-2xl p-5 mb-5 border">
+          <h2 className="text-sm font-medium text-gray-500 mb-4">항목별 지출</h2>
+          <div className="flex flex-col gap-3">
+            {Object.entries(categoryExpense)
+              .sort(([, a], [, b]) => b - a)
+              .map(([cat, amount]) => (
+                <div key={cat}>
+                  <div className="flex justify-between text-sm mb-1.5">
+                    <span className="text-gray-600">{cat}</span>
+                    <span className="font-medium text-gray-800">{fmt(amount)}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--gray-100)' }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${(amount / totalExpense) * 100}%`,
+                        background: 'var(--ski-blue)'
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 거래 내역 */}
-      <div>
-        <h2 className="text-sm font-medium text-gray-500 mb-3">거래 내역</h2>
-        <div className="border rounded-xl overflow-hidden">
-          {records.map((r, i) => (
-            <div
-              key={r.id}
-              className={`flex items-center gap-3 px-4 py-3 ${i !== records.length - 1 ? 'border-b' : ''}`}
+      <div className="bg-white rounded-2xl border overflow-hidden">
+        <div className="px-5 py-4 border-b">
+          <h2 className="text-sm font-medium text-gray-500">거래 내역</h2>
+        </div>
+        {records.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-10">거래 내역이 없어요</p>
+        ) : (
+          records.map((r, i) => (
+            <div key={r.id}
+              className={`flex items-center gap-3 px-5 py-3.5 ${
+                i !== records.length - 1 ? 'border-b' : ''
+              }`}
             >
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${r.type === 'income' ? 'bg-blue-500' : 'bg-red-400'}`} />
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                r.type === 'income' ? 'bg-blue-500' : 'bg-red-400'
+              }`} />
               <div className="flex-1 min-w-0">
-                <p className="text-sm truncate">{r.description}</p>
-                <p className="text-xs text-gray-400">{r.date} · {r.category}</p>
+                <p className="text-sm text-gray-800 truncate">{r.description}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{r.date} · {r.category}</p>
               </div>
-              <p className={`text-sm font-medium flex-shrink-0 ${r.type === 'income' ? 'text-blue-600' : 'text-red-500'}`}>
-                {r.type === 'income' ? '+' : '-'}{formatAmount(r.amount)}
+              <p className={`text-sm font-medium flex-shrink-0 ${
+                r.type === 'income' ? 'text-blue-600' : 'text-red-500'
+              }`}>
+                {r.type === 'income' ? '+' : '-'}{fmt(r.amount)}
               </p>
             </div>
-          ))}
-        </div>
+          ))
+        )}
       </div>
-
-      {/* 홈으로 */}
-      <a href="/home" className="block text-center text-xs text-gray-400 hover:text-gray-600 mt-8">
-        ← 홈으로
-      </a>
     </main>
   )
 }
