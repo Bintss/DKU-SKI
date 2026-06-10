@@ -9,20 +9,30 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() { return request.cookies.getAll() },
+        getAll() {
+          return request.cookies.getAll()
+        },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          )
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
-          })
+          )
         },
       },
     }
   )
 
+  // 세션 갱신 (중요!)
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 로그인 안 된 상태에서 보호된 페이지 접근 시 로그인으로 리다이렉트
-  if (!user && request.nextUrl.pathname.startsWith('/home')) {
+  // 보호된 경로 접근 시 로그인 리다이렉트
+  const protectedPaths = ['/home', '/finance', '/members', '/community', '/events', '/admin']
+  const isProtected = protectedPaths.some(p => request.nextUrl.pathname.startsWith(p))
+
+  if (!user && isProtected) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
@@ -34,9 +44,11 @@ export async function middleware(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (profile?.role === 'pending' &&
-        !request.nextUrl.pathname.startsWith('/pending') &&
-        !request.nextUrl.pathname.startsWith('/login')) {
+    if (
+      profile?.role === 'pending' &&
+      !request.nextUrl.pathname.startsWith('/pending') &&
+      !request.nextUrl.pathname.startsWith('/login')
+    ) {
       return NextResponse.redirect(new URL('/pending', request.url))
     }
   }
@@ -45,5 +57,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/home/:path*', '/finance/:path*', '/members/:path*', '/community/:path*', '/events/:path*', '/admin/:path*'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }
