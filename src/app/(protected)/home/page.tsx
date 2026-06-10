@@ -169,7 +169,7 @@ setUnreadCount(unread)
   { icon: '📢', label: '공지사항', href: '/notices', badge: unreadCount },
   { icon: '🏔', label: '합숙', href: '/camp', badge: 0 },
   { icon: '📅', label: '행사', href: '/events', badge: 0 },
-  { icon: '👥', label: '동문', href: '/members', badge: 0 },
+  { icon: '👥', label: '동문찾기', href: '/members', badge: 0 },
 ].map(item => (
   <a
     key={item.label}

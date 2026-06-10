@@ -25,18 +25,20 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // 세션 갱신 (중요!)
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 보호된 경로 접근 시 로그인 리다이렉트
-  const protectedPaths = ['/home', '/finance', '/members', '/community', '/events', '/admin']
-  const isProtected = protectedPaths.some(p => request.nextUrl.pathname.startsWith(p))
+  const protectedPaths = [
+    '/home', '/finance', '/members', '/community',
+    '/events', '/admin', '/camp', '/notices', '/profile'
+  ]
+  const isProtected = protectedPaths.some(p =>
+    request.nextUrl.pathname.startsWith(p)
+  )
 
   if (!user && isProtected) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // pending 상태면 승인 대기 페이지로
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')

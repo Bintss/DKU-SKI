@@ -53,7 +53,6 @@ export default function CampDetailPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [showPanel, setShowPanel] = useState(false)
 
-  // 내 신청
   const [newJoinDate, setNewJoinDate] = useState('')
   const [newLeaveDate, setNewLeaveDate] = useState('')
   const [newMemo, setNewMemo] = useState('')
@@ -61,7 +60,6 @@ export default function CampDetailPage() {
   const [addMode, setAddMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // 게스트 추가
   const [guestMode, setGuestMode] = useState(false)
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
@@ -198,12 +196,12 @@ export default function CampDetailPage() {
     fetchData()
   }
 
-  const toggleFeePaid = async (guestId: string, current: boolean, guest: Guest) => {
-  await supabase.from('camp_guests')
-    .update({ fee_paid: !current })
-    .eq('id', guestId)
-  fetchData()
-}
+  const toggleFeePaid = async (guestId: string, current: boolean) => {
+    await supabase.from('camp_guests')
+      .update({ fee_paid: !current })
+      .eq('id', guestId)
+    fetchData()
+  }
 
   const handleDeleteGuest = async (guestId: string) => {
     await supabase.from('camp_guests').delete().eq('id', guestId)
@@ -215,13 +213,13 @@ export default function CampDetailPage() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-400 text-sm">불러오는 중...</p>
+      <p className="text-sm text-gray-400">불러오는 중...</p>
     </div>
   )
 
   if (!camp) return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-400 text-sm">합숙을 찾을 수 없어요</p>
+      <p className="text-sm text-gray-400">합숙을 찾을 수 없어요</p>
     </div>
   )
 
@@ -232,7 +230,26 @@ export default function CampDetailPage() {
   const selectedGuests = selectedDate ? getGuestsByDate(selectedDate) : []
 
   return (
-    <main className="max-w-lg mx-auto px-4 py-10">
+    <main className="max-w-lg mx-auto px-4 pb-10">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between mb-4">
+        <a href="/camp" className="text-xs text-gray-400 hover:text-gray-600">← 합숙 목록</a>
+        {profile?.role === 'admin' && (
+          <div className="flex items-center gap-2">
+            <a
+              href={`/admin/camps/${id}/edit`}
+              className="text-xs text-white px-3 py-1 rounded-lg"
+              style={{ background: 'var(--ski-blue)' }}
+            >
+              수정
+            </a>
+            <span className="text-xs font-medium text-orange-500 bg-orange-50 px-2 py-1 rounded-full">
+              운영진
+            </span>
+          </div>
+        )}
+      </div>
+
       <h1 className="text-xl font-semibold mb-1">{camp.title}</h1>
       <div className="flex flex-wrap gap-x-3 text-sm text-gray-400 mb-2">
         <span>📅 {camp.start_date} ~ {camp.end_date}</span>
@@ -274,7 +291,6 @@ export default function CampDetailPage() {
 
         return (
           <div className="mb-6">
-            {/* 월 네비게이션 */}
             <div className="flex items-center justify-between mb-4">
               <button
                 onClick={() => hasPrev && setCurrentMonth(calendarMonths[currentIdx - 1])}
@@ -295,7 +311,6 @@ export default function CampDetailPage() {
               </button>
             </div>
 
-            {/* 요일 헤더 */}
             <div className="grid grid-cols-7 mb-1">
               {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
                 <div key={d} className={`text-center text-xs py-1 font-medium
@@ -306,7 +321,6 @@ export default function CampDetailPage() {
               ))}
             </div>
 
-            {/* 날짜 그리드 */}
             <div className="grid grid-cols-7 gap-1">
               {days.map((date, idx) => {
                 if (!date) return <div key={`empty-${idx}`} />
@@ -327,10 +341,11 @@ export default function CampDetailPage() {
                     className={`
                       relative flex flex-col items-center py-2 rounded-xl transition-all
                       ${!isCampDate ? 'opacity-25 cursor-default' : 'cursor-pointer'}
-                      ${isSelected ? 'bg-blue-600 shadow-md scale-105' :
+                      ${isSelected ? 'shadow-md scale-105' :
                         isMyDate && isCampDate ? 'bg-green-100' :
                         isCampDate ? 'hover:bg-gray-100' : ''}
                     `}
+                    style={isSelected ? { background: 'var(--ski-blue)' } : {}}
                   >
                     <span className={`text-sm font-medium
                       ${isSelected ? 'text-white' :
@@ -347,12 +362,12 @@ export default function CampDetailPage() {
                             ${isSelected ? 'bg-white opacity-80' :
                               p.user_id === profile?.id ? 'bg-green-500' :
                               p.participant_type === 'ob' ? 'bg-purple-400' : 'bg-blue-400'}
-                          `}/>
+                          `} />
                         ))}
                         {dayGuests.slice(0, 2).map(g => (
                           <div key={g.id} className={`w-1.5 h-1.5 rounded-full
                             ${isSelected ? 'bg-white opacity-80' : 'bg-orange-400'}
-                          `}/>
+                          `} />
                         ))}
                       </div>
                     )}
@@ -369,7 +384,6 @@ export default function CampDetailPage() {
               })}
             </div>
 
-            {/* 월 인디케이터 */}
             {calendarMonths.length > 1 && (
               <div className="flex justify-center gap-1.5 mt-4">
                 {calendarMonths.map((m, i) => (
@@ -418,7 +432,6 @@ export default function CampDetailPage() {
             </div>
           </div>
 
-          {/* 부원·OB */}
           {selectedMembers.length > 0 && (
             <div className="mb-4">
               <p className="text-xs text-gray-400 mb-2">부원 · OB</p>
@@ -451,7 +464,6 @@ export default function CampDetailPage() {
             </div>
           )}
 
-          {/* 게스트 */}
           {selectedGuests.length > 0 && (
             <div className="mb-4">
               <p className="text-xs text-gray-400 mb-2">게스트</p>
@@ -466,25 +478,25 @@ export default function CampDetailPage() {
                       <span className="text-xs text-gray-400 ml-1.5">{g.fee.toLocaleString()}원</span>
                     </div>
                     {profile?.role === 'admin' && (
-  <div className="flex items-center gap-1.5 flex-shrink-0">
-    <button
-      onClick={() => toggleFeePaid(g.id, g.fee_paid, g)}
-      className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${
-        g.fee_paid
-          ? 'bg-green-100 text-green-700'
-          : 'bg-gray-100 text-gray-500 hover:bg-green-50 hover:text-green-600'
-      }`}
-    >
-      {g.fee_paid ? '수납완료' : '미수납'}
-    </button>
-    <button
-      onClick={() => handleDeleteGuest(g.id)}
-      className="text-gray-300 hover:text-red-400 text-sm"
-    >
-      ✕
-    </button>
-  </div>
-)}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => toggleFeePaid(g.id, g.fee_paid)}
+                          className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${
+                            g.fee_paid
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-gray-100 text-gray-500 hover:bg-green-50 hover:text-green-600'
+                          }`}
+                        >
+                          {g.fee_paid ? '수납완료' : '미수납'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteGuest(g.id)}
+                          className="text-gray-300 hover:text-red-400 text-sm"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -495,76 +507,52 @@ export default function CampDetailPage() {
             <p className="text-sm text-gray-400 text-center py-4">이 날 참여자가 없어요</p>
           )}
 
-          {/* 운영진 게스트 추가 */}
           {profile?.role === 'admin' && (
             <div className="border-t pt-4 mt-2">
               {!guestMode ? (
                 <button
                   onClick={() => setGuestMode(true)}
-                  className="w-full text-sm text-blue-600 border border-blue-200 rounded-xl py-2.5 hover:bg-blue-50 transition-colors"
+                  className="w-full text-sm border border-blue-200 rounded-xl py-2.5 hover:bg-blue-50 transition-colors"
+                  style={{ color: 'var(--ski-blue)' }}
                 >
                   + 게스트 추가
                 </button>
               ) : (
                 <div className="flex flex-col gap-2">
                   <p className="text-xs font-medium text-gray-500 mb-1">게스트 추가</p>
-                  <input
-                    type="text"
-                    placeholder="이름"
-                    value={guestName}
+                  <input type="text" placeholder="이름" value={guestName}
                     onChange={e => setGuestName(e.target.value)}
-                    className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <input
-                    type="tel"
-                    placeholder="연락처 (선택)"
-                    value={guestPhone}
+                    className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
+                  <input type="tel" placeholder="연락처 (선택)" value={guestPhone}
                     onChange={e => setGuestPhone(e.target.value)}
-                    className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                    className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs text-gray-400 mb-1 block">도착일</label>
-                      <input
-                        type="date"
-                        value={guestJoinDate}
-                        min={camp.start_date}
-                        max={camp.end_date}
+                      <input type="date" value={guestJoinDate}
+                        min={camp.start_date} max={camp.end_date}
                         onChange={e => setGuestJoinDate(e.target.value)}
-                        className="w-full border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                        className="w-full border rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400" />
                     </div>
                     <div>
                       <label className="text-xs text-gray-400 mb-1 block">출발일</label>
-                      <input
-                        type="date"
-                        value={guestLeaveDate}
-                        min={guestJoinDate}
-                        max={camp.end_date}
+                      <input type="date" value={guestLeaveDate}
+                        min={guestJoinDate} max={camp.end_date}
                         onChange={e => setGuestLeaveDate(e.target.value)}
-                        className="w-full border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                        className="w-full border rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400" />
                     </div>
                   </div>
-                  <input
-                    type="number"
-                    placeholder="게스트비"
-                    value={guestFee}
+                  <input type="number" placeholder="게스트비" value={guestFee}
                     onChange={e => setGuestFee(e.target.value)}
-                    className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                    className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
                   <div className="flex gap-2">
-                    <button
-                      onClick={handleAddGuest}
-                      disabled={submitting || !guestName}
-                      className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-                    >
+                    <button onClick={handleAddGuest} disabled={submitting || !guestName}
+                      className="flex-1 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50"
+                      style={{ background: 'var(--ski-blue)' }}>
                       {submitting ? '추가 중...' : '추가'}
                     </button>
-                    <button
-                      onClick={() => { setGuestMode(false); setGuestName(''); setGuestPhone('') }}
-                      className="px-4 bg-gray-100 text-gray-600 rounded-xl py-2.5 text-sm hover:bg-gray-200"
-                    >
+                    <button onClick={() => { setGuestMode(false); setGuestName(''); setGuestPhone('') }}
+                      className="px-4 bg-gray-100 text-gray-600 rounded-xl py-2.5 text-sm hover:bg-gray-200">
                       취소
                     </button>
                   </div>
@@ -583,14 +571,14 @@ export default function CampDetailPage() {
             {!addMode && (
               <button
                 onClick={() => setAddMode(true)}
-                className="text-xs text-blue-500 hover:underline"
+                className="text-xs hover:underline"
+                style={{ color: 'var(--ski-blue)' }}
               >
                 + 일정 추가
               </button>
             )}
           </div>
 
-          {/* 등록된 내 일정 목록 */}
           {myParticipations.length === 0 && !addMode && (
             <p className="text-sm text-gray-400 text-center py-4">
               아직 신청한 일정이 없어요
@@ -631,75 +619,51 @@ export default function CampDetailPage() {
             </div>
           )}
 
-          {/* 일정 추가 폼 */}
           {addMode && (
             <div className="flex flex-col gap-3 border-t pt-4">
               <p className="text-xs text-gray-400">추가할 참여 구간을 선택해주세요</p>
-
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">구간 이름 (선택)</label>
-                <input
-                  type="text"
+                <input type="text"
                   placeholder={`${myParticipations.length + 1}차 (자동 입력)`}
-                  value={newLabel}
-                  onChange={e => setNewLabel(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                  value={newLabel} onChange={e => setNewLabel(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">도착일</label>
-                  <input
-                    type="date"
-                    value={newJoinDate}
-                    min={camp.start_date}
-                    max={camp.end_date}
+                  <input type="date" value={newJoinDate}
+                    min={camp.start_date} max={camp.end_date}
                     onChange={e => setNewJoinDate(e.target.value)}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">출발일</label>
-                  <input
-                    type="date"
-                    value={newLeaveDate}
-                    min={newJoinDate || camp.start_date}
-                    max={camp.end_date}
+                  <input type="date" value={newLeaveDate}
+                    min={newJoinDate || camp.start_date} max={camp.end_date}
                     onChange={e => setNewLeaveDate(e.target.value)}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
                 </div>
               </div>
-
               {newJoinDate && newLeaveDate && (
-                <p className="text-xs text-blue-600">
+                <p className="text-xs" style={{ color: 'var(--ski-blue)' }}>
                   {getNights(newJoinDate, newLeaveDate) > 0
                     ? `${getNights(newJoinDate, newLeaveDate)}박 ${getNights(newJoinDate, newLeaveDate) + 1}일`
                     : '당일 참여'}
                 </p>
               )}
-
-              <input
-                type="text"
-                placeholder="메모 (늦게 도착, 일찍 출발 등)"
-                value={newMemo}
-                onChange={e => setNewMemo(e.target.value)}
-                className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              />
-
+              <input type="text" placeholder="메모 (늦게 도착, 일찍 출발 등)"
+                value={newMemo} onChange={e => setNewMemo(e.target.value)}
+                className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
               <div className="flex gap-2">
-                <button
-                  onClick={handleAddParticipation}
+                <button onClick={handleAddParticipation}
                   disabled={submitting || !newJoinDate || !newLeaveDate}
-                  className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-                >
+                  className="flex-1 text-white rounded-xl py-3 text-sm font-medium disabled:opacity-50"
+                  style={{ background: 'var(--ski-blue)' }}>
                   {submitting ? '추가 중...' : '일정 추가'}
                 </button>
-                <button
-                  onClick={() => { setAddMode(false); setNewLabel(''); setNewMemo('') }}
-                  className="px-4 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm hover:bg-gray-200"
-                >
+                <button onClick={() => { setAddMode(false); setNewLabel(''); setNewMemo('') }}
+                  className="px-4 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm hover:bg-gray-200">
                   취소
                 </button>
               </div>
