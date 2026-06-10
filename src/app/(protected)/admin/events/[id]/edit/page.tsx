@@ -1,13 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
-import ImageUpload from '@/components/ImageUpload'
+import { useParams, useRouter } from 'next/navigation'
 
-export default function NewEventPage() {
+export default function EditEventPage() {
+  const { id } = useParams()
+  const router = useRouter()
+  const supabase = createClient()
+
   const [title, setTitle] = useState('')
-  const [type, setType] = useState('daytrip')
+  const [type, setType] = useState('camp')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [location, setLocation] = useState('')
@@ -17,20 +20,44 @@ export default function NewEventPage() {
   const [maxParticipants, setMaxParticipants] = useState('')
   const [guestFee, setGuestFee] = useState('30000')
   const [deadline, setDeadline] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [isOpen, setIsOpen] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const router = useRouter()
-  const supabase = createClient()
+
+  useEffect(() => {
+    const fetchEvent = async () => {
+      const { data } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      if (data) {
+        setTitle(data.title)
+        setType(data.type)
+        setStartDate(data.start_date)
+        setEndDate(data.end_date)
+        setLocation(data.location ?? '')
+        setDescription(data.description ?? '')
+        setDetail(data.detail ?? '')
+        setImageUrl(data.image_url ?? '')
+        setMaxParticipants(data.max_participants ? String(data.max_participants) : '')
+        setGuestFee(String(data.guest_fee))
+        setDeadline(data.deadline ? new Date(data.deadline).toISOString().slice(0, 16) : '')
+        setIsOpen(data.is_open)
+      }
+      setLoading(false)
+    }
+    fetchEvent()
+  }, [id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    setSubmitting(true)
     setError('')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
-
-    const { error } = await supabase.from('events').insert({
+    const { error } = await supabase.from('events').update({
       title,
       type,
       start_date: startDate,
@@ -42,22 +69,42 @@ export default function NewEventPage() {
       max_participants: maxParticipants ? parseInt(maxParticipants) : null,
       guest_fee: parseInt(guestFee),
       deadline: deadline ? new Date(deadline).toISOString() : null,
-      is_open: true,
-      created_by: user.id,
-    })
+      is_open: isOpen,
+    }).eq('id', id as string)
 
     if (error) {
       setError(error.message)
-      setLoading(false)
+      setSubmitting(false)
       return
     }
 
+    router.push(`/events/${id}`)
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('행사를 삭제할까요? 참여 신청 내역도 모두 삭제됩니다.')) return
+
+    await supabase.from('events').delete().eq('id', id as string)
     router.push('/events')
   }
 
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-sm text-gray-400">불러오는 중...</p>
+    </div>
+  )
+
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      <h1 className="text-lg font-semibold text-gray-900 mb-6">행사 등록</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-lg font-semibold text-gray-900">행사 수정</h1>
+        <button
+          onClick={handleDelete}
+          className="text-xs text-red-400 hover:text-red-500 hover:underline"
+        >
+          행사 삭제
+        </button>
+      </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {/* 행사 유형 */}
@@ -65,10 +112,10 @@ export default function NewEventPage() {
           <label className="text-xs font-medium text-gray-500 mb-1.5 block">행사 유형</label>
           <div className="grid grid-cols-2 gap-2">
             {[
+              { value: 'camp', label: '합숙 · MT' },
               { value: 'daytrip', label: '당일 행사' },
               { value: 'training', label: '정기 훈련' },
               { value: 'ob_invite', label: 'OB 초청' },
-              { value: 'etc', label: '기타' },
             ].map(opt => (
               <button
                 key={opt.value}
@@ -92,7 +139,6 @@ export default function NewEventPage() {
           <label className="text-xs font-medium text-gray-500 mb-1.5 block">행사명</label>
           <input
             type="text"
-            placeholder="예: 2026 춘계 대회"
             value={title}
             onChange={e => setTitle(e.target.value)}
             className="w-full bg-white border rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400"
@@ -107,10 +153,7 @@ export default function NewEventPage() {
             <input
               type="date"
               value={startDate}
-              onChange={e => {
-                setStartDate(e.target.value)
-                if (!endDate) setEndDate(e.target.value)
-              }}
+              onChange={e => setStartDate(e.target.value)}
               className="w-full bg-white border rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400"
               required
             />
@@ -120,7 +163,6 @@ export default function NewEventPage() {
             <input
               type="date"
               value={endDate}
-              min={startDate}
               onChange={e => setEndDate(e.target.value)}
               className="w-full bg-white border rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400"
               required
@@ -164,15 +206,24 @@ export default function NewEventPage() {
           />
         </div>
 
-        {/* 이미지 */}
-<div>
-  <label className="text-xs font-medium text-gray-500 mb-1.5 block">이미지</label>
-  <ImageUpload
-    bucket="events"
-    value={imageUrl}
-    onChange={setImageUrl}
-  />
-</div>
+        {/* 이미지 URL */}
+        <div>
+          <label className="text-xs font-medium text-gray-500 mb-1.5 block">이미지 URL (선택)</label>
+          <input
+            type="url"
+            placeholder="https://..."
+            value={imageUrl}
+            onChange={e => setImageUrl(e.target.value)}
+            className="w-full bg-white border rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400"
+          />
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt="미리보기"
+              className="mt-2 w-full h-40 object-cover rounded-xl"
+            />
+          )}
+        </div>
 
         {/* 신청 마감일 */}
         <div>
@@ -208,15 +259,32 @@ export default function NewEventPage() {
           </div>
         </div>
 
+        {/* 신청 상태 */}
+        <div className="flex items-center justify-between bg-white border rounded-xl px-4 py-3">
+          <span className="text-sm text-gray-700">신청 받기</span>
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className={`w-12 h-6 rounded-full transition-colors relative ${
+              isOpen ? 'bg-blue-500' : 'bg-gray-200'
+            }`}
+            style={isOpen ? { background: 'var(--ski-blue)' } : {}}
+          >
+            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+              isOpen ? 'translate-x-7' : 'translate-x-1'
+            }`} />
+          </button>
+        </div>
+
         {error && <p className="text-red-500 text-xs">{error}</p>}
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={submitting}
           className="w-full text-white rounded-xl py-3.5 text-sm font-semibold disabled:opacity-50 mt-2"
           style={{ background: 'var(--ski-blue)' }}
         >
-          {loading ? '등록 중...' : '행사 등록'}
+          {submitting ? '저장 중...' : '저장하기'}
         </button>
       </form>
     </main>

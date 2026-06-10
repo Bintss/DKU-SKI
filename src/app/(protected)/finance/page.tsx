@@ -18,7 +18,7 @@ export default function FinancePage() {
   const [season, setSeason] = useState('2026-27')
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
-
+  const [txOpen, setTxOpen] = useState(false)
   useEffect(() => {
     const fetchFinance = async () => {
       setLoading(true)
@@ -119,14 +119,25 @@ export default function FinancePage() {
       )}
 
       {/* 거래 내역 */}
-      <div className="bg-white rounded-2xl border overflow-hidden">
-        <div className="px-5 py-4 border-b">
-          <h2 className="text-sm font-medium text-gray-500">거래 내역</h2>
-        </div>
-        {records.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-10">거래 내역이 없어요</p>
-        ) : (
-          records.map((r, i) => (
+<div className="bg-white rounded-2xl border overflow-hidden">
+  <button
+    onClick={() => setTxOpen(!txOpen)}
+    className="w-full px-5 py-4 flex items-center justify-between"
+  >
+    <h2 className="text-sm font-medium text-gray-500">
+      거래 내역
+      <span className="text-gray-900 ml-1.5">{records.length}건</span>
+    </h2>
+    <span className="text-xs text-gray-400">{txOpen ? '접기 ▲' : '펼치기 ▼'}</span>
+  </button>
+
+  {txOpen && (
+    <>
+      {records.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-10 border-t">거래 내역이 없어요</p>
+      ) : (
+        <div className="border-t">
+          {records.map((r, i) => (
             <div key={r.id}
               className={`flex items-center gap-3 px-5 py-3.5 ${
                 i !== records.length - 1 ? 'border-b' : ''
@@ -145,9 +156,12 @@ export default function FinancePage() {
                 {r.type === 'income' ? '+' : '-'}{fmt(r.amount)}
               </p>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
+    </>
+  )}
+</div>
     </main>
   )
 }

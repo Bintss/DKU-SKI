@@ -11,16 +11,19 @@ type Profile = {
 }
 
 const NAV_ITEMS = [
-  { href: '/home', icon: '🏠', label: '홈' },
-  { href: '/camp', icon: '🏔', label: '합숙' },
-  { href: '/events', icon: '📅', label: '행사' },
-  { href: '/finance', icon: '💰', label: '재무 공시' },
-  { href: '/members', icon: '👥', label: '동문 디렉토리' },
-  { href: '/community', icon: '💬', label: '커뮤니티' },
+  { href: '/home', label: '홈' },
+  { href: '/notices', label: '공지사항' },
+  { href: '/camp', label: '합숙' },
+  { href: '/events', label: '행사' },
+  { href: '/members', label: '동문 디렉토리' },
+  { href: '/community', label: '커뮤니티' },
 ]
 
 const ADMIN_ITEMS = [
-  { href: '/admin/members', icon: '⚙️', label: '회원 관리' },
+  { href: '/admin/members', label: '회원 관리' },
+  { href: '/notices/new', label: '공지 작성' },
+  { href: '/camp/new', label: '합숙 등록' },
+  { href: '/admin/events/new', label: '행사 등록' },
 ]
 
 export default function Drawer({
@@ -76,10 +79,12 @@ export default function Drawer({
       />
 
       {/* 드로어 */}
-      <div className={`fixed top-0 left-0 h-full w-72 z-50 flex flex-col transition-transform duration-300 ease-out ${
-        open ? 'translate-x-0' : '-translate-x-full'
-      }`}
-        style={{ background: 'white' }}
+      <div
+        className={`fixed top-0 left-0 h-full w-72 z-50 flex flex-col transition-transform duration-300 ease-out`}
+        style={{
+          background: 'white',
+          transform: open ? 'translateX(0)' : 'translateX(-100%)',
+        }}
       >
         {/* 헤더 */}
         <div className="px-6 pt-12 pb-6" style={{ background: 'var(--ski-blue)' }}>
@@ -109,15 +114,14 @@ export default function Drawer({
               <button
                 key={item.href}
                 onClick={() => handleNav(item.href)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-left transition-colors ${
+                className={`w-full flex items-center px-4 py-3 rounded-xl mb-1 text-left transition-colors text-sm ${
                   isActive
                     ? 'text-white font-medium'
                     : 'text-gray-600 hover:bg-gray-50'
                 }`}
                 style={isActive ? { background: 'var(--ski-blue)' } : {}}
               >
-                <span className="text-lg">{item.icon}</span>
-                <span className="text-sm">{item.label}</span>
+                {item.label}
               </button>
             )
           })}
@@ -132,10 +136,9 @@ export default function Drawer({
                 <button
                   key={item.href}
                   onClick={() => handleNav(item.href)}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-left text-gray-600 hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center px-4 py-3 rounded-xl mb-1 text-left text-sm text-gray-600 hover:bg-gray-50 transition-colors"
                 >
-                  <span className="text-lg">{item.icon}</span>
-                  <span className="text-sm">{item.label}</span>
+                  {item.label}
                 </button>
               ))}
             </>
@@ -146,17 +149,15 @@ export default function Drawer({
         <div className="px-3 py-4 border-t">
           <button
             onClick={() => handleNav('/profile')}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-gray-600 hover:bg-gray-50 transition-colors mb-1"
+            className="w-full flex items-center px-4 py-3 rounded-xl text-left text-sm text-gray-600 hover:bg-gray-50 transition-colors mb-1"
           >
-            <span className="text-lg">👤</span>
-            <span className="text-sm">내 프로필</span>
+            내 프로필
           </button>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-red-400 hover:bg-red-50 transition-colors"
+            className="w-full flex items-center px-4 py-3 rounded-xl text-left text-sm text-red-400 hover:bg-red-50 transition-colors"
           >
-            <span className="text-lg">🚪</span>
-            <span className="text-sm">로그아웃</span>
+            로그아웃
           </button>
         </div>
       </div>

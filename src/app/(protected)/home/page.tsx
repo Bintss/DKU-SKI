@@ -34,6 +34,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const supabase = createClient()
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -41,7 +42,11 @@ export default function HomePage() {
       if (!user) { router.push('/login'); return }
 
       const today = new Date().toISOString().split('T')[0]
-
+      const { data: noticeData } = await supabase.from('notices').select('id')
+const { data: readData } = await supabase.from('notice_reads').select('notice_id').eq('user_id', user.id)
+const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
+const unread = (noticeData ?? []).filter(n => !readSet.has(n.id)).length
+setUnreadCount(unread)
       const [{ data: profileData }, { data: campData }, { data: financeData }] =
         await Promise.all([
           supabase.from('profiles').select('name, generation, role, join_type').eq('id', user.id).single(),
@@ -161,47 +166,27 @@ export default function HomePage() {
       {/* 빠른 메뉴 */}
       <div className="grid grid-cols-4 gap-3 mb-5">
         {[
-          { icon: '🏔', label: '합숙', href: '/camp' },
-          { icon: '📅', label: '행사', href: '/events' },
-          { icon: '💰', label: '재무', href: '/finance' },
-          { icon: '👥', label: '동문', href: '/members' },
-        ].map(item => (
-          <a
-            key={item.label}
-            href={item.href}
-            className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-white border hover:border-gray-300 transition-colors"
-          >
-            <span className="text-2xl">{item.icon}</span>
-            <span className="text-xs text-gray-600 font-medium">{item.label}</span>
-          </a>
-        ))}
+  { icon: '📢', label: '공지사항', href: '/notices', badge: unreadCount },
+  { icon: '🏔', label: '합숙', href: '/camp', badge: 0 },
+  { icon: '📅', label: '행사', href: '/events', badge: 0 },
+  { icon: '👥', label: '동문', href: '/members', badge: 0 },
+].map(item => (
+  <a
+    key={item.label}
+    href={item.href}
+    className="relative flex flex-col items-center gap-2 py-4 rounded-2xl bg-white border hover:border-gray-300 transition-colors"
+  >
+    {item.badge > 0 && (
+      <span className="absolute top-2 right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+        {item.badge > 9 ? '9+' : item.badge}
+      </span>
+    )}
+    <span className="text-2xl">{item.icon}</span>
+    <span className="text-xs text-gray-600 font-medium">{item.label}</span>
+  </a>
+))}
       </div>
 
-      {/* 운영진 메뉴 */}
-      {profile?.role === 'admin' && (
-        <div className="rounded-2xl p-4 border border-orange-100"
-          style={{ background: '#FFF8F5' }}
-        >
-          <p className="text-xs font-medium text-orange-500 mb-3">운영진 메뉴</p>
-          <div className="flex gap-2">
-            <a href="/admin/members"
-              className="text-xs bg-orange-500 text-white px-3 py-2 rounded-lg hover:bg-orange-600"
-            >
-              회원 관리
-            </a>
-            <a href="/camp/new"
-              className="text-xs bg-orange-500 text-white px-3 py-2 rounded-lg hover:bg-orange-600"
-            >
-              합숙 등록
-            </a>
-            <a href="/admin/events/new"
-              className="text-xs bg-orange-500 text-white px-3 py-2 rounded-lg hover:bg-orange-600"
-            >
-              행사 등록
-            </a>
-          </div>
-        </div>
-      )}
     </main>
   )
 }
