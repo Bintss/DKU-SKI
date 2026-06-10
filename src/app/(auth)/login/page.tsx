@@ -70,7 +70,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full text-white rounded-2xl py-3.5 text-sm font-semibold disabled:opacity-50 transition-opacity mt-1"
+            className="w-full text-white rounded-2xl py-3.5 text-sm font-semibold disabled:opacity-50 transition-opacity mt-1 btn-press"
             style={{ background: 'var(--ski-blue)' }}
           >
             {loading ? '로그인 중...' : '로그인'}

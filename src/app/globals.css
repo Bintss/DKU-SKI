@@ -35,5 +35,55 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 터치 피드백 */
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 카드 hover 효과 */
+.card-hover {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.card-hover:active {
+  transform: translateY(0px);
+  box-shadow: none;
+}
+
+/* 버튼 터치 효과 */
+.btn-press {
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+.btn-press:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+
+/* 순차적 등장 애니메이션 */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-slide-up {
+  animation: fadeSlideUp 0.4s ease forwards;
+  opacity: 0;
+}
+
+.delay-1 { animation-delay: 0.05s; }
+.delay-2 { animation-delay: 0.1s; }
+.delay-3 { animation-delay: 0.15s; }
+.delay-4 { animation-delay: 0.2s; }
+.delay-5 { animation-delay: 0.25s; }
+
 /* 모바일 탭 하이라이트 제거 */
 * { -webkit-tap-highlight-color: transparent; }

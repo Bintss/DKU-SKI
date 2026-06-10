@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { SkeletonNotice } from '@/components/Skeleton'
 
 type Notice = {
   id: string
@@ -66,10 +67,11 @@ export default function NoticesPage() {
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-400">불러오는 중...</p>
-    </div>
-  )
+  <main className="max-w-lg mx-auto px-4 pb-10">
+    <div className="h-7 bg-gray-200 rounded-full w-24 mb-5 animate-pulse" />
+    <SkeletonNotice />
+  </main>
+)
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
@@ -99,8 +101,8 @@ export default function NoticesPage() {
               <a
                 key={notice.id}
                 href={`/notices/${notice.id}`}
-                className="block bg-white border rounded-2xl p-5 hover:border-gray-300 transition-colors"
-              >
+                className="block bg-white border rounded-2xl p-5 hover:border-gray-300 transition-colors card-hover"
+>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">

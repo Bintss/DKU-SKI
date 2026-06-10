@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { SkeletonHome } from '@/components/Skeleton'
 
 type Profile = {
   name: string
@@ -81,14 +82,15 @@ setUnreadCount(unread)
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm" style={{ color: 'var(--gray-400)' }}>불러오는 중...</p>
-    </div>
-  )
+  <div className="max-w-lg mx-auto pt-4">
+    <SkeletonHome />
+  </div>
+)
 
   return (
-    <main className="max-w-lg mx-auto px-4 pb-10">
-      {/* 프로필 카드 */}
+  <main className="max-w-lg mx-auto px-4 pb-10">
+    {/* 프로필 카드 */}
+    <div className="fade-slide-up delay-1">
       <div className="rounded-2xl px-6 py-5 mb-5 text-white"
         style={{ background: 'linear-gradient(135deg, var(--ski-blue) 0%, var(--ski-blue-light) 100%)' }}
       >
@@ -98,9 +100,11 @@ setUnreadCount(unread)
           {profile?.generation}기 · {roleLabel[profile?.role ?? 'pending']}
         </p>
       </div>
+    </div>
 
       {/* 다음 합숙 카드 */}
       {upcomingCamp && (
+      <div className="fade-slide-up delay-2">
         <a href={`/camp/${upcomingCamp.id}`}
           className="block rounded-2xl p-5 mb-5 border border-blue-100 hover:border-blue-300 transition-colors"
           style={{ background: 'var(--ski-blue-50)' }}
@@ -129,10 +133,12 @@ setUnreadCount(unread)
             <span className="text-xs" style={{ color: 'var(--ski-blue)' }}>자세히 보기 →</span>
           </div>
         </a>
+      </div>
       )}
 
       {/* 재무 요약 */}
       {finance && (
+      <div className="fade-slide-up delay-3">
         <a href="/finance"
           className="block rounded-2xl p-5 mb-5 bg-white border hover:border-gray-300 transition-colors"
         >
@@ -161,9 +167,11 @@ setUnreadCount(unread)
             </div>
           </div>
         </a>
+      </div>
       )}
 
       {/* 빠른 메뉴 */}
+      <div className="fade-slide-up delay-4">
       <div className="grid grid-cols-4 gap-3 mb-5">
         {[
   { icon: '📢', label: '공지사항', href: '/notices', badge: unreadCount },
@@ -174,8 +182,8 @@ setUnreadCount(unread)
   <a
     key={item.label}
     href={item.href}
-    className="relative flex flex-col items-center gap-2 py-4 rounded-2xl bg-white border hover:border-gray-300 transition-colors"
-  >
+    className="relative flex flex-col items-center gap-2 py-4 rounded-2xl bg-white border hover:border-gray-300 transition-colors card-hover"
+>
     {item.badge > 0 && (
       <span className="absolute top-2 right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
         {item.badge > 9 ? '9+' : item.badge}
@@ -186,7 +194,7 @@ setUnreadCount(unread)
   </a>
 ))}
       </div>
-
+      </div>
     </main>
   )
 }

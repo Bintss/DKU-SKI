@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-
+import { SkeletonProfile } from '@/components/Skeleton'
 type Profile = {
   id: string
   name: string
@@ -118,10 +118,10 @@ export default function ProfilePage() {
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-400">불러오는 중...</p>
-    </div>
-  )
+  <main className="max-w-lg mx-auto px-4 pb-10">
+    <SkeletonProfile />
+  </main>
+)
 
   if (!profile) return null
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-
+import { SkeletonList } from '@/components/Skeleton'
 type Profile = {
   id: string
   name: string
@@ -75,10 +75,11 @@ export default function MembersPage() {
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-400">불러오는 중...</p>
-    </div>
-  )
+  <main className="max-w-lg mx-auto px-4 pb-10">
+    <div className="h-7 bg-gray-200 rounded-full w-24 mb-5 animate-pulse" />
+    <SkeletonList count={4} />
+  </main>
+)
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
@@ -177,8 +178,8 @@ export default function MembersPage() {
                     <a
                       key={m.id}
                       href={`/members/${m.id}`}
-                      className="flex items-center gap-3 bg-white border rounded-2xl px-4 py-3.5 hover:border-gray-300 transition-colors"
-                    >
+                      className="flex items-center gap-3 bg-white border rounded-2xl px-4 py-3.5 hover:border-gray-300 transition-colors card-hover"
+>
                       {/* 아바타 */}
                       {m.avatar_url ? (
                         <img

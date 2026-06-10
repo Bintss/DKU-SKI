@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
-
+import { SkeletonNotice } from '@/components/Skeleton'
 type Camp = {
   id: string
-  title: string
+  title: string 
   season: string
   start_date: string
   end_date: string
@@ -212,10 +212,11 @@ export default function CampDetailPage() {
     Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24))
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-400">불러오는 중...</p>
-    </div>
-  )
+  <main className="max-w-lg mx-auto px-4 pb-10">
+    <div className="h-7 bg-gray-200 rounded-full w-24 mb-5 animate-pulse" />
+    <SkeletonNotice />
+  </main>
+)
 
   if (!camp) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -336,17 +337,22 @@ export default function CampDetailPage() {
 
                 return (
                   <button
-                    key={date}
-                    onClick={() => isCampDate && handleDateClick(date)}
-                    className={`
-                      relative flex flex-col items-center py-2 rounded-xl transition-all
-                      ${!isCampDate ? 'opacity-25 cursor-default' : 'cursor-pointer'}
-                      ${isSelected ? 'shadow-md scale-105' :
-                        isMyDate && isCampDate ? 'bg-green-100' :
-                        isCampDate ? 'hover:bg-gray-100' : ''}
-                    `}
-                    style={isSelected ? { background: 'var(--ski-blue)' } : {}}
-                  >
+  key={date}
+  onClick={() => isCampDate && handleDateClick(date)}
+  className={`
+    relative flex flex-col items-center py-2 rounded-xl
+    ${!isCampDate ? 'opacity-25 cursor-default' : 'cursor-pointer'}
+    ${isMyDate && isCampDate && !isSelected ? 'bg-green-100' :
+      isCampDate && !isSelected ? 'hover:bg-gray-100' : ''}
+  `}
+  style={{
+    background: isSelected ? 'var(--ski-blue)' : undefined,
+    transform: isSelected ? 'scale(1.08)' : 'scale(1)',
+    boxShadow: isSelected ? '0 4px 12px rgba(27, 63, 171, 0.35)' : 'none',
+    transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, box-shadow 0.2s ease',
+    zIndex: isSelected ? 1 : 0,
+  }}
+>
                     <span className={`text-sm font-medium
                       ${isSelected ? 'text-white' :
                         dayOfWeek === 0 ? 'text-red-400' :

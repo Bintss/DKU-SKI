@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { SkeletonList } from '@/components/Skeleton'
 
 type Post = {
   id: string
@@ -172,9 +173,10 @@ export default function CommunityPage() {
 
       {/* 게시글 목록 */}
       {loading ? (
-        <div className="text-center py-16">
-          <p className="text-sm text-gray-400">불러오는 중...</p>
-        </div>
+        <main className="max-w-lg mx-auto px-4 pb-10">
+    <div className="h-7 bg-gray-200 rounded-full w-24 mb-5 animate-pulse" />
+    <SkeletonList count={4} />
+  </main>
       ) : posts.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-sm text-gray-400">아직 게시글이 없어요</p>
@@ -196,8 +198,8 @@ export default function CommunityPage() {
               <a
                 key={post.id}
                 href={`/community/${post.id}`}
-                className="block bg-white border rounded-2xl p-5 hover:border-gray-300 transition-colors"
-              >
+                className="block bg-white border rounded-2xl p-5 hover:border-gray-300 transition-colors card-hover"
+>
                 <div className="flex items-start gap-3">
                   {author.avatar_url ? (
                     <img

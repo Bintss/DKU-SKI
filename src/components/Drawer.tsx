@@ -70,22 +70,26 @@ export default function Drawer({
   return (
     <>
       {/* 오버레이 */}
-      <div
-        className={`fixed inset-0 z-40 transition-opacity duration-300 ${
-          open ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-        style={{ background: 'rgba(0,0,0,0.4)' }}
-        onClick={onClose}
-      />
+<div
+  className={`fixed inset-0 z-40 transition-opacity duration-300 ease-out ${
+    open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+  }`}
+  style={{ background: 'rgba(0,0,0,0.4)' }}
+  onClick={onClose}
+/>
 
-      {/* 드로어 */}
-      <div
-        className={`fixed top-0 left-0 h-full w-72 z-50 flex flex-col transition-transform duration-300 ease-out`}
-        style={{
-          background: 'white',
-          transform: open ? 'translateX(0)' : 'translateX(-100%)',
-        }}
-      >
+{/* 드로어 */}
+<div
+  className="fixed top-0 left-0 h-full w-72 z-50 flex flex-col"
+  style={{
+    background: 'white',
+    transform: open ? 'translateX(0)' : 'translateX(-100%)',
+    transition: open
+      ? 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)'
+      : 'transform 0.25s cubic-bezier(0.32, 0.72, 0, 1)',
+    willChange: 'transform',
+  }}
+>
         {/* 헤더 */}
         <div className="px-6 pt-12 pb-6" style={{ background: 'var(--ski-blue)' }}>
           <div className="flex items-center gap-3 mb-4">
