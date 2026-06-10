@@ -22,7 +22,22 @@ export async function GET(request: Request) {
         },
       }
     )
+
     await supabase.auth.exchangeCodeForSession(code)
+
+    // 프로필 확인 — generation이 0이면 추가 정보 입력 필요
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('generation, join_type')
+        .eq('id', user.id)
+        .single()
+
+      if (!profile || profile.generation === 0) {
+        return NextResponse.redirect(`${origin}/register/kakao`)
+      }
+    }
   }
 
   return NextResponse.redirect(`${origin}/home`)

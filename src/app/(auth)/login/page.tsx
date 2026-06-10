@@ -84,12 +84,23 @@ export default function LoginPage() {
         </div>
 
         <button
-          disabled
-          className="w-full bg-yellow-400 text-yellow-900 rounded-2xl py-3.5 text-sm font-medium opacity-40 cursor-not-allowed"
-        >
-          카카오로 로그인 (준비 중)
-        </button>
-
+  onClick={async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'kakao',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`
+      }
+    })
+  }}
+  className="w-full bg-yellow-400 text-yellow-900 rounded-2xl py-3.5 text-sm font-medium hover:bg-yellow-500 transition-colors"
+>
+  카카오로 로그인
+</button>
+        <p className="text-xs text-center text-gray-400 mt-6">
+  <a href="/forgot-password" className="hover:underline" style={{ color: 'var(--ski-blue)' }}>
+    비밀번호를 잊으셨나요?
+  </a>
+</p>
         <p className="text-xs text-center text-gray-400 mt-6">
           계정이 없으신가요?{' '}
           <a href="/register" style={{ color: 'var(--ski-blue)' }} className="font-medium hover:underline">
