@@ -24,9 +24,9 @@ type Profile = {
 }
 
 const CHANNELS = [
-  { value: 'free', label: '자유', desc: '모든 부원' },
-  { value: 'student', label: '재학생', desc: '재학생 전용' },
-  { value: 'ob', label: 'OB', desc: 'OB 전용' },
+  { value: 'free', label: '자유' },
+  { value: 'student', label: '재학생' },
+  { value: 'ob', label: 'OB' },
 ]
 
 export default function CommunityPage() {
@@ -42,10 +42,7 @@ export default function CommunityPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       const { data } = await supabase
-        .from('profiles')
-        .select('id, role, join_type')
-        .eq('id', user.id)
-        .single()
+        .from('profiles').select('id, role, join_type').eq('id', user.id).single()
       setProfile(data)
     }
     fetchProfile()
@@ -82,7 +79,6 @@ export default function CommunityPage() {
     return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
   }
 
-  // 채널 접근 권한
   const canAccess = (ch: string) => {
     if (!profile) return false
     if (profile.role === 'admin') return true
@@ -92,17 +88,8 @@ export default function CommunityPage() {
     return false
   }
 
-  // 채널 작성 권한
-  const canWrite = (ch: string) => {
-    if (!profile) return false
-    if (profile.role === 'admin') return true
-    if (ch === 'free') return true
-    if (ch === 'student') return profile.join_type === 'student'
-    if (ch === 'ob') return profile.join_type === 'ob'
-    return false
-  }
+  const canWrite = (ch: string) => canAccess(ch)
 
-  // 작성자 표시
   const getAuthorDisplay = (post: Post) => {
     if (post.is_anonymous && profile?.role !== 'admin') {
       return { name: '익명', generation: null, avatar_url: null }
@@ -123,7 +110,6 @@ export default function CommunityPage() {
 
   const accessibleChannels = CHANNELS.filter(ch => canAccess(ch.value))
 
-  // 현재 채널이 접근 불가면 첫 번째 접근 가능한 채널로 이동
   useEffect(() => {
     if (profile && !canAccess(channel)) {
       setChannel(accessibleChannels[0]?.value ?? 'free')
@@ -132,108 +118,113 @@ export default function CommunityPage() {
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      <h1 className="text-lg font-semibold text-gray-900 mb-5">커뮤니티</h1>
+      {/* 헤더 */}
+      <div className="flex items-end justify-between mb-6">
+        <div>
+          <p className="text-xs font-black tracking-widest uppercase mb-1"
+            style={{ color: 'var(--text-hint)' }}>Community</p>
+          <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>커뮤니티</h1>
+        </div>
+        {canWrite(channel) && (
+          <a href={`/community/new?channel=${channel}`}
+            className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press"
+            style={{ background: 'var(--ski-blue)' }}>
+            + 글쓰기
+          </a>
+        )}
+      </div>
 
       {/* 채널 탭 */}
-      <div className="flex gap-1 p-1 rounded-xl mb-5" style={{ background: 'var(--gray-100)' }}>
+      <div className="flex gap-4 mb-6"
+        style={{ borderBottom: '0.5px solid var(--border-primary)' }}
+      >
         {accessibleChannels.map(ch => (
           <button
             key={ch.value}
             onClick={() => setChannel(ch.value)}
-            className={`flex-1 text-sm py-2 rounded-lg font-medium transition-colors ${
-              channel === ch.value ? 'bg-white shadow text-gray-900' : 'text-gray-500'
-            }`}
+            className="pb-3 text-sm font-black transition-colors relative"
+            style={{ color: channel === ch.value ? 'var(--text-primary)' : 'var(--text-hint)' }}
           >
             {ch.label}
+            {channel === ch.value && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
+                style={{ background: 'var(--ski-blue)' }} />
+            )}
           </button>
         ))}
       </div>
 
-      {/* 글쓰기 버튼 */}
-      {canWrite(channel) && (
-        <div className="flex justify-end mb-4">
-          <a
-            href={`/community/new?channel=${channel}`}
-            className="text-xs text-white px-4 py-2 rounded-xl"
-            style={{ background: 'var(--ski-blue)' }}
-          >
-            + 글쓰기
-          </a>
-        </div>
-      )}
-
-      {/* 접근 불가 안내 */}
-      {!canWrite(channel) && (
-        <div className="bg-gray-50 border rounded-xl px-4 py-3 mb-4 text-center">
-          <p className="text-xs text-gray-400">
-            {channel === 'student' ? '재학생만 글을 작성할 수 있어요' : 'OB만 글을 작성할 수 있어요'}
-          </p>
-        </div>
-      )}
-
       {/* 게시글 목록 */}
       {loading ? (
-        <main className="max-w-lg mx-auto px-4 pb-10">
-    <div className="h-7 bg-gray-200 rounded-full w-24 mb-5 animate-pulse" />
-    <SkeletonList count={4} />
-  </main>
+        <SkeletonList count={4} />
       ) : posts.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-sm text-gray-400">아직 게시글이 없어요</p>
+        <div className="text-center py-20">
+          <p className="text-4xl font-black mb-2" style={{ color: 'rgba(255,255,255,0.04)' }}>
+            NO POST
+          </p>
+          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>아직 게시글이 없어요</p>
           {canWrite(channel) && (
-            <a
-              href={`/community/new?channel=${channel}`}
-              className="mt-3 inline-block text-sm hover:underline"
-              style={{ color: 'var(--ski-blue)' }}
-            >
+            <a href={`/community/new?channel=${channel}`}
+              className="mt-3 inline-block text-sm font-semibold"
+              style={{ color: 'var(--accent-blue)' }}>
               첫 글을 작성해보세요
             </a>
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           {posts.map(post => {
             const author = getAuthorDisplay(post)
             return (
-              <a
-                key={post.id}
-                href={`/community/${post.id}`}
-                className="block bg-white border rounded-2xl p-5 hover:border-gray-300 transition-colors card-hover"
->
+              <a key={post.id} href={`/community/${post.id}`}
+                className="block rounded-2xl p-5 card-hover btn-press"
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '0.5px solid var(--border-primary)',
+                }}
+              >
                 <div className="flex items-start gap-3">
                   {author.avatar_url ? (
-                    <img
-                      src={author.avatar_url}
-                      alt={author.name}
-                      className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                    />
+                    <img src={author.avatar_url} alt={author.name}
+                      className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
                   ) : (
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
-                      style={{ background: post.is_anonymous && profile?.role !== 'admin' ? 'var(--gray-300)' : 'var(--ski-blue)' }}
-                    >
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
+                      style={{
+                        background: post.is_anonymous && profile?.role !== 'admin'
+                          ? 'rgba(255,255,255,0.1)' : 'var(--ski-blue)'
+                      }}>
                       {author.name[0]}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-medium text-gray-700">{author.name}</span>
+                      <span className="text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
+                        {author.name}
+                      </span>
                       {author.generation && (
-                        <span className="text-xs text-gray-400">{author.generation}기</span>
+                        <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                          {author.generation}기
+                        </span>
                       )}
                       {post.is_anonymous && profile?.role === 'admin' && (
-                        <span className="text-xs bg-orange-50 text-orange-400 px-1.5 py-0.5 rounded-full">익명</span>
+                        <span className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+                          style={{ background: 'rgba(230,126,34,0.2)', color: 'var(--accent-orange)' }}>
+                          익명
+                        </span>
                       )}
-                      <span className="text-xs text-gray-300 ml-auto flex-shrink-0">{formatDate(post.created_at)}</span>
+                      <span className="text-xs ml-auto flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                        {formatDate(post.created_at)}
+                      </span>
                     </div>
-                    <p className="text-sm font-medium text-gray-900 mb-1 truncate">{post.title}</p>
-                    <p className="text-xs text-gray-400 line-clamp-2">{post.content}</p>
+                    <p className="text-sm font-bold mb-1 truncate" style={{ color: 'var(--text-primary)' }}>
+                      {post.title}
+                    </p>
+                    <p className="text-xs line-clamp-2" style={{ color: 'var(--text-tertiary)' }}>
+                      {post.content}
+                    </p>
                     {post.image_url && (
-                      <img
-                        src={post.image_url}
-                        alt=""
-                        className="mt-2 w-full h-32 object-cover rounded-xl"
-                      />
+                      <img src={post.image_url} alt=""
+                        className="mt-2 w-full h-32 object-cover rounded-xl" />
                     )}
                   </div>
                 </div>

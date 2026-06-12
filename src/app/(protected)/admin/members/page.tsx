@@ -66,59 +66,75 @@ export default function AdminMembersPage() {
   }
 
   const roleColor: Record<string, string> = {
-    member: 'bg-blue-50 text-blue-600',
-    ob: 'bg-purple-50 text-purple-600',
-    admin: 'bg-orange-50 text-orange-600',
-    pending: 'bg-gray-100 text-gray-400',
+    member: 'rgba(27,63,171,0.3)',
+    ob: 'rgba(155,89,182,0.3)',
+    admin: 'rgba(230,126,34,0.3)',
+    pending: 'rgba(255,255,255,0.06)',
+  }
+
+  const roleTextColor: Record<string, string> = {
+    member: 'var(--accent-blue)',
+    ob: 'var(--accent-purple)',
+    admin: 'var(--accent-orange)',
+    pending: 'var(--text-hint)',
   }
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-400">불러오는 중...</p>
+      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
   )
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      <h1 className="text-lg font-semibold text-gray-900 mb-5">회원 관리</h1>
+      <div className="mb-6">
+        <p className="text-xs font-black tracking-widest uppercase mb-1"
+          style={{ color: 'var(--text-hint)' }}>Admin</p>
+        <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>회원 관리</h1>
+      </div>
 
       {/* 승인 대기 */}
       {pending.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-sm font-medium text-gray-500">승인 대기</h2>
-            <span
-              className="text-xs font-medium text-white px-2 py-0.5 rounded-full"
-              style={{ background: 'var(--ski-blue)' }}
-            >
+            <h2 className="text-xs font-black tracking-widest uppercase"
+              style={{ color: 'var(--text-hint)' }}>승인 대기</h2>
+            <span className="text-xs font-black text-white px-2 py-0.5 rounded-full"
+              style={{ background: 'var(--ski-blue)' }}>
               {pending.length}
             </span>
           </div>
           <div className="flex flex-col gap-2">
             {pending.map(p => (
-              <div
-                key={p.id}
-                className="bg-white border border-blue-100 rounded-2xl px-4 py-4 flex items-center justify-between gap-4"
+              <div key={p.id}
+                className="rounded-2xl px-4 py-4 flex items-center justify-between gap-4"
+                style={{
+                  background: 'rgba(27,63,171,0.1)',
+                  border: '0.5px solid rgba(27,63,171,0.3)',
+                }}
               >
                 <div>
-                  <p className="font-medium text-sm text-gray-900">{p.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>
+                    {p.name}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
                     {p.generation}기 · {p.join_type === 'ob' ? '졸업생' : '재학생'}
                     {p.student_id && ` · ${p.student_id}`}
                   </p>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => approve(p.id, p.join_type)}
-                    className="text-xs text-white px-3 py-1.5 rounded-lg"
-                    style={{ background: 'var(--ski-blue)' }}
-                  >
+                  <button onClick={() => approve(p.id, p.join_type)}
+                    className="text-xs font-black text-white px-3 py-1.5 rounded-lg btn-press"
+                    style={{ background: 'var(--ski-blue)' }}>
                     승인
                   </button>
-                  <button
-                    onClick={() => reject(p.id)}
-                    className="text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-red-50 hover:text-red-500 transition-colors"
-                  >
+                  <button onClick={() => reject(p.id)}
+                    className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
+                    style={{
+                      background: 'rgba(255,107,107,0.1)',
+                      color: '#FF6B6B',
+                      border: '0.5px solid rgba(255,107,107,0.2)',
+                    }}>
                     거절
                   </button>
                 </div>
@@ -129,63 +145,77 @@ export default function AdminMembersPage() {
       )}
 
       {pending.length === 0 && (
-        <div className="mb-6 bg-white border rounded-2xl px-5 py-4 text-center">
-          <p className="text-sm text-gray-400">대기 중인 가입 신청이 없어요</p>
+        <div className="rounded-2xl px-5 py-4 text-center mb-6"
+          style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
+            대기 중인 가입 신청이 없어요
+          </p>
         </div>
       )}
 
       {/* 전체 부원 */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-gray-500">
-            전체 부원 <span className="text-gray-900 ml-1">{members.length}명</span>
+          <h2 className="text-xs font-black tracking-widest uppercase"
+            style={{ color: 'var(--text-hint)' }}>
+            전체 부원
+            <span className="ml-2" style={{ color: 'var(--text-tertiary)' }}>
+              {members.length}명
+            </span>
           </h2>
         </div>
 
-        {/* 검색 */}
-        <input
-          type="text"
-          placeholder="이름, 기수, 학번 검색"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full border rounded-xl px-4 py-3 text-sm outline-none mb-3 bg-white focus:border-blue-400 transition-colors"
-          style={{ borderColor: 'var(--gray-200)' }}
-        />
+        <input type="text" placeholder="이름, 기수, 학번 검색"
+          value={search} onChange={e => setSearch(e.target.value)}
+          className="w-full rounded-xl px-4 py-3 text-sm mb-3"
+          style={{
+            background: 'var(--bg-secondary)',
+            border: '0.5px solid var(--border-primary)',
+            color: 'var(--text-primary)',
+          }} />
 
         {filteredMembers.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">검색 결과가 없어요</p>
+          <p className="text-sm text-center py-8" style={{ color: 'var(--text-hint)' }}>
+            검색 결과가 없어요
+          </p>
         ) : (
           <div className="flex flex-col gap-2">
             {filteredMembers.map(p => (
-              <div
-                key={p.id}
-                className="bg-white border rounded-2xl px-4 py-3.5 flex items-center justify-between gap-4"
+              <div key={p.id}
+                className="rounded-2xl px-4 py-3.5 flex items-center justify-between gap-4"
+                style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
               >
                 <div className="flex items-center gap-3">
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0"
-                    style={{ background: 'var(--ski-blue)' }}
-                  >
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-black flex-shrink-0"
+                    style={{ background: 'var(--ski-blue)' }}>
                     {p.name[0]}
                   </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-sm text-gray-900">{p.name}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${roleColor[p.role]}`}>
+                      <p className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
+                        {p.name}
+                      </p>
+                      <span className="text-xs font-black px-2 py-0.5 rounded-full"
+                        style={{
+                          background: roleColor[p.role],
+                          color: roleTextColor[p.role],
+                        }}>
                         {roleLabel[p.role]}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
                       {p.generation}기 · {p.join_type === 'ob' ? '졸업생' : '재학생'}
                       {p.student_id && ` · ${p.student_id}`}
                     </p>
                   </div>
                 </div>
-                <select
-                  value={p.role}
-                  onChange={e => changeRole(p.id, e.target.value)}
-                  className="text-xs border rounded-lg px-2 py-1.5 text-gray-600 outline-none bg-white flex-shrink-0"
-                >
+                <select value={p.role} onChange={e => changeRole(p.id, e.target.value)}
+                  className="text-xs font-bold rounded-lg px-2 py-1.5 flex-shrink-0"
+                  style={{
+                    background: 'var(--bg-secondary)',
+                    border: '0.5px solid var(--border-primary)',
+                    color: 'var(--text-secondary)',
+                  }}>
                   <option value="member">부원</option>
                   <option value="ob">OB</option>
                   <option value="admin">운영진</option>

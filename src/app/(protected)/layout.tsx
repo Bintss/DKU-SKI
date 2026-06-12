@@ -19,7 +19,7 @@ export default function ProtectedLayout({
   }, [pathname])
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--gray-50)' }}>
+    <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
       <Header />
       <div
         style={{

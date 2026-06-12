@@ -65,79 +65,67 @@ export default function CampPage() {
   const formatDateRange = (start: string, end: string) => {
     const s = new Date(start)
     const e = new Date(end)
-    const sm = String(s.getMonth() + 1).padStart(2, '0')
-    const sd = String(s.getDate()).padStart(2, '0')
-    const em = String(e.getMonth() + 1).padStart(2, '0')
-    const ed = String(e.getDate()).padStart(2, '0')
-    return `${sm}.${sd} — ${em}.${ed}`
+    return `${String(s.getMonth() + 1).padStart(2, '0')}.${String(s.getDate()).padStart(2, '0')} — ${String(e.getMonth() + 1).padStart(2, '0')}.${String(e.getDate()).padStart(2, '0')}`
   }
 
   if (loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      <div className="h-8 bg-gray-200 rounded-full w-16 mb-5 animate-pulse" />
+      <div className="h-8 rounded-full w-16 mb-5 animate-pulse"
+        style={{ background: 'rgba(255,255,255,0.06)' }} />
       <SkeletonList count={3} />
     </main>
   )
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10 relative">
-  {/* 배경 그라디언트 블러 */}
-  <div
-    className="absolute top-0 left-0 right-0 h-64 -z-10 opacity-10 blur-3xl rounded-full"
-    style={{ background: 'var(--ski-blue)' }}
-  />
-      {/* 헤더 */}
+      <div className="absolute top-0 left-0 right-0 h-64 -z-10 opacity-10 blur-3xl rounded-full"
+        style={{ background: 'var(--ski-blue)' }} />
+
       <div className="flex items-end justify-between mb-6">
         <div>
-          <p className="text-xs font-semibold tracking-widest text-gray-400 uppercase mb-1">
-            Ski Camp
-          </p>
-          <h1 className="text-3xl font-black text-gray-900 leading-tight">합숙</h1>
+          <p className="text-xs font-black tracking-widest uppercase mb-1"
+            style={{ color: 'var(--text-hint)' }}>Ski Camp</p>
+          <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>합숙</h1>
         </div>
         {profile?.role === 'admin' && (
-          <a
-            href="/camp/new"
-            className="text-xs font-semibold text-white px-4 py-2 rounded-xl"
-            style={{ background: 'var(--ski-blue)' }}
-          >
+          <a href="/camp/new"
+            className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press"
+            style={{ background: 'var(--ski-blue)' }}>
             + 등록
           </a>
         )}
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-4 mb-6 border-b">
+      <div className="flex gap-4 mb-6" style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
         {[
           { value: 'upcoming', label: '예정' },
           { value: 'past', label: '지난 합숙' },
         ].map(t => (
-          <button
-            key={t.value}
-            onClick={() => setTab(t.value as 'upcoming' | 'past')}
-            className={`pb-3 text-sm font-semibold transition-colors relative ${
-              tab === t.value ? 'text-gray-900' : 'text-gray-400'
-            }`}
-          >
+          <button key={t.value} onClick={() => setTab(t.value as 'upcoming' | 'past')}
+            className="pb-3 text-sm font-black transition-colors relative"
+            style={{ color: tab === t.value ? 'var(--text-primary)' : 'var(--text-hint)' }}>
             {t.label}
             {tab === t.value && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                style={{ background: 'var(--ski-blue)' }}
-              />
+                style={{ background: 'var(--ski-blue)' }} />
             )}
           </button>
         ))}
       </div>
 
-      {/* 합숙 목록 */}
+      {/* 목록 */}
       {filtered.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-4xl font-black text-gray-100 mb-2">NO CAMP</p>
-          <p className="text-sm text-gray-400">
+          <p className="text-4xl font-black mb-2" style={{ color: 'rgba(255,255,255,0.05)' }}>
+            NO CAMP
+          </p>
+          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
             {tab === 'upcoming' ? '예정된 합숙이 없어요' : '지난 합숙 기록이 없어요'}
           </p>
           {tab === 'upcoming' && profile?.role === 'admin' && (
-            <a href="/camp/new" className="mt-4 inline-block text-sm font-semibold hover:underline"
-              style={{ color: 'var(--ski-blue)' }}>
+            <a href="/camp/new" className="mt-4 inline-block text-sm font-black hover:underline"
+              style={{ color: 'var(--accent-blue)' }}>
               합숙 등록하기
             </a>
           )}
@@ -150,86 +138,61 @@ export default function CampPage() {
             const isFirst = idx === 0 && tab === 'upcoming'
 
             return (
-              <a
-                key={camp.id}
-  href={`/camp/${camp.id}`}
-  className="block rounded-2xl overflow-hidden card-hover btn-press"
-  style={{
-    background: isFirst
-      ? 'linear-gradient(135deg, rgba(27,63,171,0.85) 0%, rgba(46,85,200,0.75) 100%)'
-      : 'white',
-    border: isFirst
-      ? '1px solid rgba(255,255,255,0.2)'
-      : '1px solid var(--gray-200)',
-    backdropFilter: isFirst ? 'blur(12px)' : 'none',
-    WebkitBackdropFilter: isFirst ? 'blur(12px)' : 'none',
-    boxShadow: isFirst
-      ? '0 8px 32px rgba(27,63,171,0.25), inset 0 1px 0 rgba(255,255,255,0.15)'
-      : 'none',
-  }}
->
+              <a key={camp.id} href={`/camp/${camp.id}`}
+                className="block rounded-2xl overflow-hidden card-hover btn-press"
+                style={{
+                  background: isFirst
+                    ? 'linear-gradient(135deg, rgba(27,63,171,0.85) 0%, rgba(46,85,200,0.75) 100%)'
+                    : 'var(--bg-card)',
+                  border: isFirst
+                    ? '0.5px solid rgba(255,255,255,0.15)'
+                    : '0.5px solid var(--border-primary)',
+                  backdropFilter: isFirst ? 'blur(12px)' : 'none',
+                  boxShadow: isFirst ? '0 8px 32px rgba(27,63,171,0.3), inset 0 1px 0 rgba(255,255,255,0.1)' : 'none',
+                }}>
                 <div className="p-5">
-                  {/* 상단 메타 */}
                   <div className="flex items-center justify-between mb-3">
-                    <span
-                      className="text-xs font-bold tracking-widest uppercase px-2.5 py-1 rounded-full"
+                    <span className="text-xs font-black tracking-widest uppercase px-2.5 py-1 rounded-full"
                       style={{
-                        background: isFirst ? 'rgba(255,255,255,0.2)' : 'var(--ski-blue-50)',
-                        color: isFirst ? 'white' : 'var(--ski-blue)',
-                      }}
-                    >
+                        background: isFirst ? 'rgba(255,255,255,0.15)' : 'rgba(27,63,171,0.2)',
+                        color: isFirst ? '#fff' : 'var(--accent-blue)',
+                      }}>
                       {camp.season}
                     </span>
                     {deadline && (
-                      <span className={`text-xs font-bold ${
-                        isFirst ? 'text-yellow-300' : 'text-orange-500'
-                      }`}>
+                      <span className="text-xs font-black"
+                        style={{ color: isFirst ? '#FFD700' : 'var(--accent-orange)' }}>
                         {deadline}
                       </span>
                     )}
                   </div>
 
-                  {/* 제목 */}
-                  <h2 className={`text-xl font-black leading-tight mb-4 ${
-                    isFirst ? 'text-white' : 'text-gray-900'
-                  }`}>
+                  <h2 className="text-xl font-black leading-tight mb-4"
+                    style={{ color: isFirst ? '#fff' : 'var(--text-primary)' }}>
                     {camp.title}
                   </h2>
 
-                  {/* 날짜·장소 */}
-                  <div className={`flex items-center gap-4 text-sm ${
-                    isFirst ? 'text-blue-200' : 'text-gray-500'
-                  }`}>
-                    <span className="font-semibold">
-                      {formatDateRange(camp.start_date, camp.end_date)}
-                    </span>
-                    <span className="text-xs">
-                      {nights}박 {nights + 1}일
-                    </span>
-                    {camp.location && (
-                      <>
-                        <span>·</span>
-                        <span className="truncate">{camp.location}</span>
-                      </>
-                    )}
+                  <div className="flex items-center gap-3 text-sm flex-wrap"
+                    style={{ color: isFirst ? 'rgba(255,255,255,0.5)' : 'var(--text-tertiary)' }}>
+                    <span className="font-semibold">{formatDateRange(camp.start_date, camp.end_date)}</span>
+                    <span className="text-xs">{nights}박 {nights + 1}일</span>
+                    {camp.location && <><span>·</span><span className="truncate">{camp.location}</span></>}
                   </div>
 
-                  {/* 신청 상태 바 */}
                   <div className="flex items-center justify-between mt-4">
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                      camp.is_open
-                        ? isFirst
-                          ? 'bg-white/20 text-white'
-                          : 'bg-green-50 text-green-600'
-                        : isFirst
-                          ? 'bg-white/10 text-blue-200'
-                          : 'bg-gray-100 text-gray-400'
-                    }`}>
+                    <span className="text-xs font-black px-2.5 py-1 rounded-full"
+                      style={{
+                        background: camp.is_open
+                          ? isFirst ? 'rgba(255,255,255,0.15)' : 'rgba(46,204,113,0.15)'
+                          : isFirst ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.06)',
+                        color: camp.is_open
+                          ? isFirst ? '#fff' : 'var(--accent-green)'
+                          : isFirst ? 'rgba(255,255,255,0.4)' : 'var(--text-hint)',
+                      }}>
                       {camp.is_open ? '신청 중' : '신청 마감'}
                     </span>
-                    <span className={`text-xs font-bold ${
-                      isFirst ? 'text-blue-200' : 'text-gray-400'
-                    }`}>
+                    <span className="text-xs font-black"
+                      style={{ color: isFirst ? 'rgba(255,255,255,0.4)' : 'var(--text-hint)' }}>
                       자세히 →
                     </span>
                   </div>

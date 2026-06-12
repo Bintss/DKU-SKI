@@ -1,59 +1,63 @@
 @import "tailwindcss";
 
 :root {
-  /* 스키부 블루 — 로고 기반 */
   --ski-blue: #1B3FAB;
   --ski-blue-light: #2E55C8;
   --ski-blue-dark: #122D7A;
-  --ski-blue-50: #EEF2FF;
-  --ski-blue-100: #D4DCFA;
+  --ski-blue-50: rgba(27,63,171,0.15);
+  --ski-blue-100: rgba(27,63,171,0.25);
 
-  /* 그레이 스케일 */
-  --gray-50: #F8F9FA;
-  --gray-100: #F1F3F5;
-  --gray-200: #E9ECEF;
-  --gray-300: #DEE2E6;
-  --gray-400: #ADB5BD;
-  --gray-500: #6C757D;
-  --gray-600: #495057;
-  --gray-700: #343A40;
-  --gray-900: #212529;
+  --bg-primary: #0A0A0F;
+  --bg-secondary: #16161E;
+  --bg-tertiary: #1E1E28;
+  --bg-card: rgba(255,255,255,0.04);
+  --bg-card-hover: rgba(255,255,255,0.07);
 
-  /* 시맨틱 */
-  --color-success: #2ECC71;
-  --color-warning: #F39C12;
-  --color-danger: #E74C3C;
+  --border-primary: rgba(255,255,255,0.08);
+  --border-secondary: rgba(255,255,255,0.12);
+
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(255,255,255,0.6);
+  --text-tertiary: rgba(255,255,255,0.3);
+  --text-hint: rgba(255,255,255,0.15);
+
+  --accent-blue: #7FA4FF;
+  --accent-purple: #BD87D8;
+  --accent-orange: #E87E34;
+  --accent-green: #2ECC71;
+  --accent-red: #F09595;
 }
 
 * { box-sizing: border-box; }
+*:focus { outline: none; }
+
+html, body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
     'Pretendard', sans-serif;
-  background: var(--gray-50);
-  color: var(--gray-900);
   -webkit-font-smoothing: antialiased;
+  background: var(--bg-primary);
 }
 
-/* 터치 피드백 */
-button, a {
-  -webkit-tap-highlight-color: transparent;
-}
+* { -webkit-tap-highlight-color: transparent; }
 
-/* 카드 hover 효과 */
+/* 카드 hover */
 .card-hover {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .card-hover:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 }
 .card-hover:active {
   transform: translateY(0px);
-  box-shadow: none;
 }
 
-/* 버튼 터치 효과 */
+/* 버튼 터치 */
 .btn-press {
   transition: transform 0.1s ease, opacity 0.1s ease;
 }
@@ -62,28 +66,20 @@ button, a {
   opacity: 0.85;
 }
 
-/* 순차적 등장 애니메이션 */
+/* 순차 등장 */
 @keyframes fadeSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
 .fade-slide-up {
   animation: fadeSlideUp 0.4s ease forwards;
   opacity: 0;
 }
-
 .delay-1 { animation-delay: 0.05s; }
 .delay-2 { animation-delay: 0.1s; }
 .delay-3 { animation-delay: 0.15s; }
 .delay-4 { animation-delay: 0.2s; }
 .delay-5 { animation-delay: 0.25s; }
 
-/* 모바일 탭 하이라이트 제거 */
-* { -webkit-tap-highlight-color: transparent; }
+/* 스크롤바 */
+::-webkit-scrollbar { width: 0; }

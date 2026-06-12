@@ -86,13 +86,11 @@ export default function PostDetailPage() {
     e.preventDefault()
     if (!newComment.trim() || !profile) return
     setSubmitting(true)
-
     await supabase.from('comments').insert({
       post_id: id as string,
       author_id: profile.id,
       content: newComment.trim(),
     })
-
     setNewComment('')
     setSubmitting(false)
     fetchData()
@@ -121,13 +119,13 @@ export default function PostDetailPage() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-400">불러오는 중...</p>
+      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
   )
 
   if (!post) return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-400">게시글을 찾을 수 없어요</p>
+      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>게시글을 찾을 수 없어요</p>
     </div>
   )
 
@@ -137,114 +135,145 @@ export default function PostDetailPage() {
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="flex items-center justify-between mb-4">
-        <a href="/community" className="text-xs text-gray-400 hover:text-gray-600">← 목록</a>
+        <a href="/community" className="text-xs font-semibold"
+          style={{ color: 'var(--text-tertiary)' }}>← 목록</a>
         {canDelete && (
-          <button
-            onClick={handleDeletePost}
-            className="text-xs text-red-400 hover:text-red-500"
-          >
+          <button onClick={handleDeletePost}
+            className="text-xs font-bold"
+            style={{ color: '#FF6B6B' }}>
             삭제
           </button>
         )}
       </div>
 
       {/* 게시글 */}
-      <div className="bg-white border rounded-2xl p-5 mb-4">
-        <span className="text-xs font-medium px-2.5 py-1 rounded-full mb-3 inline-block"
-          style={{ background: 'var(--ski-blue-50)', color: 'var(--ski-blue)' }}
-        >
+      <div className="rounded-2xl p-5 mb-4"
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
+      >
+        <span className="text-xs font-black px-2.5 py-1 rounded-full mb-3 inline-block"
+          style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
           {CHANNEL_LABEL[post.channel]}
         </span>
 
-        <h1 className="text-lg font-semibold text-gray-900 mb-3">{post.title}</h1>
+        <h1 className="text-lg font-black mb-3" style={{ color: 'var(--text-primary)' }}>
+          {post.title}
+        </h1>
 
-        {/* 작성자 */}
-        <div className="flex items-center gap-2 mb-4 pb-4 border-b">
+        <div className="flex items-center gap-2 mb-4 pb-4"
+          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
           {author.avatar_url ? (
             <img src={author.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
           ) : (
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs"
-              style={{ background: post.is_anonymous && profile?.role !== 'admin' ? '#ADB5BD' : 'var(--ski-blue)' }}
-            >
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black"
+              style={{
+                background: post.is_anonymous && profile?.role !== 'admin'
+                  ? 'rgba(255,255,255,0.1)' : 'var(--ski-blue)'
+              }}>
               {author.name[0]}
             </div>
           )}
-          <span className="text-sm font-medium text-gray-700">{author.name}</span>
+          <span className="text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>
+            {author.name}
+          </span>
           {author.generation && (
-            <span className="text-xs text-gray-400">{author.generation}기</span>
+            <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+              {author.generation}기
+            </span>
           )}
           {post.is_anonymous && profile?.role === 'admin' && (
-            <span className="text-xs bg-orange-50 text-orange-400 px-1.5 py-0.5 rounded-full">익명</span>
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+              style={{ background: 'rgba(230,126,34,0.2)', color: 'var(--accent-orange)' }}>
+              익명
+            </span>
           )}
-          <span className="text-xs text-gray-300 ml-auto">{formatDate(post.created_at)}</span>
+          <span className="text-xs ml-auto" style={{ color: 'var(--text-hint)' }}>
+            {formatDate(post.created_at)}
+          </span>
         </div>
 
-        {/* 이미지 */}
         {post.image_url && (
           <img src={post.image_url} alt="" className="w-full rounded-xl mb-4 object-cover" />
         )}
 
-        {/* 본문 */}
-        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{post.content}</p>
+        <p className="text-sm leading-relaxed whitespace-pre-wrap"
+          style={{ color: 'var(--text-secondary)' }}>
+          {post.content}
+        </p>
       </div>
 
       {/* 댓글 */}
-      <div className="bg-white border rounded-2xl p-5">
-        <h2 className="text-sm font-medium text-gray-500 mb-4">
-          댓글 <span className="text-gray-900 ml-1">{comments.length}</span>
+      <div className="rounded-2xl p-5"
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
+      >
+        <h2 className="text-xs font-black tracking-widest uppercase mb-4"
+          style={{ color: 'var(--text-hint)' }}>
+          댓글 <span style={{ color: 'var(--text-tertiary)' }}>{comments.length}</span>
         </h2>
 
         {comments.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-4">첫 댓글을 남겨보세요</p>
+          <p className="text-sm text-center py-4" style={{ color: 'var(--text-hint)' }}>
+            첫 댓글을 남겨보세요
+          </p>
         ) : (
           <div className="flex flex-col gap-4 mb-5">
             {comments.map(c => (
               <div key={c.id} className="flex gap-2.5">
                 {c.profiles?.avatar_url ? (
-                  <img src={c.profiles.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                  <img src={c.profiles.avatar_url} alt=""
+                    className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
                 ) : (
-                  <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0"
-                    style={{ background: 'var(--ski-blue)' }}
-                  >
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
+                    style={{ background: 'var(--ski-blue)' }}>
                     {c.profiles?.name?.[0] ?? '?'}
                   </div>
                 )}
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-medium text-gray-700">{c.profiles?.name}</span>
-                    <span className="text-xs text-gray-400">{c.profiles?.generation}기</span>
-                    <span className="text-xs text-gray-300 ml-auto">{formatDate(c.created_at)}</span>
+                    <span className="text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
+                      {c.profiles?.name}
+                    </span>
+                    <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                      {c.profiles?.generation}기
+                    </span>
+                    <span className="text-xs ml-auto" style={{ color: 'var(--text-hint)' }}>
+                      {formatDate(c.created_at)}
+                    </span>
                     {(profile?.id === c.author_id || profile?.role === 'admin') && (
-                      <button
-                        onClick={() => handleDeleteComment(c.id)}
-                        className="text-xs text-gray-300 hover:text-red-400"
-                      >
+                      <button onClick={() => handleDeleteComment(c.id)}
+                        className="text-xs font-bold"
+                        style={{ color: 'rgba(255,107,107,0.5)' }}>
                         삭제
                       </button>
                     )}
                   </div>
-                  <p className="text-sm text-gray-700 leading-relaxed">{c.content}</p>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                    {c.content}
+                  </p>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* 댓글 입력 */}
-        <form onSubmit={handleAddComment} className="flex gap-2 border-t pt-4">
+        <form onSubmit={handleAddComment} className="flex gap-2"
+          style={{ borderTop: '0.5px solid var(--border-primary)', paddingTop: '16px' }}
+        >
           <input
             type="text"
             placeholder="댓글을 입력해주세요"
             value={newComment}
             onChange={e => setNewComment(e.target.value)}
-            className="flex-1 bg-gray-50 border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400"
+            className="flex-1 rounded-xl px-3 py-2.5 text-sm"
+            style={{
+              background: 'var(--bg-secondary)',
+              border: '0.5px solid var(--border-primary)',
+              color: 'var(--text-primary)',
+            }}
           />
           <button
             type="submit"
             disabled={submitting || !newComment.trim()}
-            className="text-white px-4 rounded-xl text-sm font-medium disabled:opacity-50 flex-shrink-0"
+            className="text-white px-4 rounded-xl text-sm font-black disabled:opacity-50 flex-shrink-0 btn-press"
             style={{ background: 'var(--ski-blue)' }}
           >
             등록

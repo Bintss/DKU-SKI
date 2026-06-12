@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6"
-      style={{ background: 'var(--gray-50)' }}
+      style={{ background: 'var(--bg-primary)' }}
     >
       <div className="flex flex-col items-center mb-8">
         <img
@@ -55,7 +55,7 @@ export default function ForgotPasswordPage() {
             <a
               href="/login"
               className="text-sm hover:underline"
-              style={{ color: 'var(--ski-blue)' }}
+              style={{ color: 'var(--text-primary)' }}
             >
               로그인으로 돌아가기
             </a>
@@ -71,7 +71,11 @@ export default function ForgotPasswordPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               className="w-full bg-white border rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-blue-400 transition-colors"
-              style={{ borderColor: 'var(--gray-200)' }}
+              style={{
+  background: 'var(--bg-secondary)',
+  border: '0.5px solid var(--border-primary)',
+  color: 'var(--text-primary)',
+}}
               required
             />
             {error && <p className="text-red-500 text-xs px-1">{error}</p>}
@@ -79,7 +83,7 @@ export default function ForgotPasswordPage() {
               type="submit"
               disabled={loading}
               className="w-full text-white rounded-2xl py-3.5 text-sm font-semibold disabled:opacity-50"
-              style={{ background: 'var(--ski-blue)' }}
+              style={{ background: 'var(--ski-blue)', color: '#fff' }}
             >
               {loading ? '전송 중...' : '재설정 링크 보내기'}
             </button>

@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
-import { SkeletonNotice } from '@/components/Skeleton'
+
 type Camp = {
   id: string
-  title: string 
+  title: string
   season: string
   start_date: string
   end_date: string
@@ -25,7 +25,7 @@ type Participant = {
   leave_date: string
   label: string | null
   memo: string | null
-  profiles: { name: string; generation: number } | null
+  profiles: { name: string; generation: number; avatar_url: string | null } | null
 }
 
 type Guest = {
@@ -50,22 +50,27 @@ export default function CampDetailPage() {
   const [myParticipations, setMyParticipations] = useState<Participant[]>([])
   const [loading, setLoading] = useState(true)
   const [currentMonth, setCurrentMonth] = useState<{ year: number; month: number } | null>(null)
+
+  // 날짜 상세 패널
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [showPanel, setShowPanel] = useState(false)
 
-  const [newJoinDate, setNewJoinDate] = useState('')
-  const [newLeaveDate, setNewLeaveDate] = useState('')
-  const [newMemo, setNewMemo] = useState('')
-  const [newLabel, setNewLabel] = useState('')
-  const [addMode, setAddMode] = useState(false)
+  // 신청 모드
+  const [applyMode, setApplyMode] = useState(false)
+  const [dragStart, setDragStart] = useState<number | null>(null)
+  const [dragEnd, setDragEnd] = useState<number | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  // 게스트 추가
   const [guestMode, setGuestMode] = useState(false)
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
   const [guestJoinDate, setGuestJoinDate] = useState('')
   const [guestLeaveDate, setGuestLeaveDate] = useState('')
   const [guestFee, setGuestFee] = useState('')
+
+  const calGridRef = useRef<HTMLDivElement>(null)
 
   const fetchData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -76,7 +81,7 @@ export default function CampDetailPage() {
         supabase.from('camps').select('*').eq('id', id).single(),
         supabase.from('profiles').select('id, role').eq('id', user.id).single(),
         supabase.from('camp_participants')
-          .select('*, profiles(name, generation)')
+          .select('*, profiles(name, generation, avatar_url)')
           .eq('camp_id', id),
         supabase.from('camp_guests').select('*').eq('camp_id', id),
       ])
@@ -92,8 +97,6 @@ export default function CampDetailPage() {
     if (campData) {
       const start = new Date(campData.start_date)
       setCurrentMonth({ year: start.getFullYear(), month: start.getMonth() })
-      setNewJoinDate(campData.start_date)
-      setNewLeaveDate(campData.end_date)
       setGuestFee(String(campData.guest_fee))
       setGuestJoinDate(campData.start_date)
       setGuestLeaveDate(campData.end_date)
@@ -135,49 +138,94 @@ export default function CampDetailPage() {
     return days
   }
 
-  const handleDateClick = (date: string) => {
-    if (!camp) return
-    if (date < camp.start_date || date > camp.end_date) return
-    setSelectedDate(date)
-    setGuestJoinDate(date)
-    setGuestLeaveDate(date)
-    setGuestMode(false)
-    setShowPanel(true)
+  const getCampDateIndex = (date: string) => {
+    if (!camp) return -1
+    const campDates = getCampDates()
+    return campDates.indexOf(date)
   }
 
-  const handleAddParticipation = async () => {
-    if (!newJoinDate || !newLeaveDate || !camp || !profile) return
+  const getCampDates = () => {
+    if (!camp) return []
+    const dates: string[] = []
+    const cur = new Date(camp.start_date)
+    const end = new Date(camp.end_date)
+    while (cur <= end) {
+      dates.push(cur.toISOString().split('T')[0])
+      cur.setDate(cur.getDate() + 1)
+    }
+    return dates
+  }
+
+  // 드래그 로직
+  const handleCellPointerDown = (date: string) => {
+    if (!applyMode || !camp) return
+    if (date < camp.start_date || date > camp.end_date) return
+    const dayNum = parseInt(date.split('-')[2])
+    setIsDragging(true)
+    setDragStart(dayNum)
+    setDragEnd(dayNum)
+  }
+
+  const handleCellPointerEnter = (date: string) => {
+    if (!isDragging || !applyMode || !camp) return
+    if (date < camp.start_date || date > camp.end_date) return
+    const dayNum = parseInt(date.split('-')[2])
+    setDragEnd(dayNum)
+  }
+
+  const handlePointerUp = () => {
+    setIsDragging(false)
+  }
+
+  const getDragRange = () => {
+    if (dragStart === null) return { lo: null, hi: null }
+    const lo = Math.min(dragStart, dragEnd ?? dragStart)
+    const hi = Math.max(dragStart, dragEnd ?? dragStart)
+    return { lo, hi }
+  }
+
+  const getDragDates = () => {
+    if (!camp || dragStart === null) return { joinDate: '', leaveDate: '' }
+    const { lo, hi } = getDragRange()
+    const year = new Date(camp.start_date).getFullYear()
+    const month = new Date(camp.start_date).getMonth() + 1
+    const joinDate = `${year}-${String(month).padStart(2, '0')}-${String(lo).padStart(2, '0')}`
+    const leaveDate = `${year}-${String(month).padStart(2, '0')}-${String(hi).padStart(2, '0')}`
+    return { joinDate, leaveDate }
+  }
+
+  const handleConfirmApply = async () => {
+    if (!camp || !profile || dragStart === null) return
     setSubmitting(true)
 
-    const label = newLabel || `${myParticipations.length + 1}차`
+    const { joinDate, leaveDate } = getDragDates()
+    const label = `${myParticipations.length + 1}차`
 
     await supabase.from('camp_participants').insert({
       camp_id: camp.id,
       user_id: profile.id,
       participant_type: profile.role === 'ob' ? 'ob' : 'member',
-      join_date: newJoinDate,
-      leave_date: newLeaveDate,
+      join_date: joinDate,
+      leave_date: leaveDate,
       label,
-      memo: newMemo || null,
       status: 'confirmed',
     })
 
-    setAddMode(false)
-    setNewMemo('')
-    setNewLabel('')
+    setApplyMode(false)
+    setDragStart(null)
+    setDragEnd(null)
     setSubmitting(false)
     fetchData()
   }
 
-  const handleDeleteParticipation = async (participationId: string) => {
-    await supabase.from('camp_participants').delete().eq('id', participationId)
+  const handleDeleteParticipation = async (pid: string) => {
+    await supabase.from('camp_participants').delete().eq('id', pid)
     fetchData()
   }
 
   const handleAddGuest = async () => {
     if (!guestName || !camp || !profile) return
     setSubmitting(true)
-
     await supabase.from('camp_guests').insert({
       camp_id: camp.id,
       name: guestName,
@@ -188,7 +236,6 @@ export default function CampDetailPage() {
       fee_paid: false,
       registered_by: profile.id,
     })
-
     setGuestName('')
     setGuestPhone('')
     setGuestMode(false)
@@ -197,9 +244,7 @@ export default function CampDetailPage() {
   }
 
   const toggleFeePaid = async (guestId: string, current: boolean) => {
-    await supabase.from('camp_guests')
-      .update({ fee_paid: !current })
-      .eq('id', guestId)
+    await supabase.from('camp_guests').update({ fee_paid: !current }).eq('id', guestId)
     fetchData()
   }
 
@@ -212,72 +257,84 @@ export default function CampDetailPage() {
     Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24))
 
   if (loading) return (
-  <main className="max-w-lg mx-auto px-4 pb-10">
-    <div className="h-7 bg-gray-200 rounded-full w-24 mb-5 animate-pulse" />
-    <SkeletonNotice />
-  </main>
-)
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
+    </div>
+  )
 
   if (!camp) return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-400">합숙을 찾을 수 없어요</p>
+      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>합숙을 찾을 수 없어요</p>
     </div>
   )
 
   const calendarMonths = getCalendarMonths()
-  const canApply = camp.is_open &&
-    (!camp.deadline || new Date(camp.deadline) > new Date())
+  const canApply = camp.is_open && (!camp.deadline || new Date(camp.deadline) > new Date())
+  const campDates = getCampDates()
   const selectedMembers = selectedDate ? getMembersByDate(selectedDate) : []
   const selectedGuests = selectedDate ? getGuestsByDate(selectedDate) : []
+  const { lo: dragLo, hi: dragHi } = getDragRange()
+  const { joinDate: dragJoinDate, leaveDate: dragLeaveDate } = getDragDates()
+  const dragNights = dragJoinDate && dragLeaveDate ? getNights(dragJoinDate, dragLeaveDate) : 0
 
   return (
-    <main className="max-w-lg mx-auto px-4 pb-10">
+    <main
+      className="max-w-lg mx-auto px-4 pb-40"
+      onPointerUp={handlePointerUp}
+      style={{ touchAction: applyMode ? 'none' : 'auto' }}
+    >
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">
-        <a href="/camp" className="text-xs text-gray-400 hover:text-gray-600">← 합숙 목록</a>
+        <a href="/camp" className="text-xs font-semibold"
+          style={{ color: 'var(--text-tertiary)' }}>← 합숙</a>
         {profile?.role === 'admin' && (
           <div className="flex items-center gap-2">
-            <a
-              href={`/admin/camps/${id}/edit`}
-              className="text-xs text-white px-3 py-1 rounded-lg"
-              style={{ background: 'var(--ski-blue)' }}
-            >
+            <a href={`/admin/camps/${id}/edit`}
+              className="text-xs font-black text-white px-3 py-1 rounded-lg btn-press"
+              style={{ background: 'var(--ski-blue)' }}>
               수정
             </a>
-            <span className="text-xs font-medium text-orange-500 bg-orange-50 px-2 py-1 rounded-full">
+            <span className="text-xs font-black px-2 py-1 rounded-full"
+              style={{ background: 'rgba(230,126,34,0.2)', color: 'var(--accent-orange)' }}>
               운영진
             </span>
           </div>
         )}
       </div>
 
-      <h1 className="text-xl font-semibold mb-1">{camp.title}</h1>
-      <div className="flex flex-wrap gap-x-3 text-sm text-gray-400 mb-2">
-        <span>📅 {camp.start_date} ~ {camp.end_date}</span>
-        {camp.location && <span>📍 {camp.location}</span>}
+      {/* 캠프 정보 */}
+      <div className="mb-5">
+        <p className="text-xs font-black tracking-widest uppercase mb-1"
+          style={{ color: 'var(--text-hint)' }}>
+          {camp.season} · Ski Camp
+        </p>
+        <h1 className="text-2xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
+          {camp.title}
+        </h1>
+        <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
+          {camp.start_date} — {camp.end_date}
+          {camp.location && ` · ${camp.location}`}
+        </p>
+        {camp.description && (
+          <p className="text-sm mt-2" style={{ color: 'var(--text-tertiary)' }}>
+            {camp.description}
+          </p>
+        )}
       </div>
-      {camp.description && (
-        <p className="text-sm text-gray-500 mb-4">{camp.description}</p>
-      )}
 
       {/* 참여 현황 요약 */}
       <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-blue-50 rounded-xl px-4 py-3 text-center">
-          <p className="text-xs text-blue-400 mb-1">부원</p>
-          <p className="text-2xl font-semibold text-blue-600">
-            {[...new Set(participants.filter(p => p.participant_type === 'member').map(p => p.user_id))].length}
-          </p>
-        </div>
-        <div className="bg-purple-50 rounded-xl px-4 py-3 text-center">
-          <p className="text-xs text-purple-400 mb-1">OB</p>
-          <p className="text-2xl font-semibold text-purple-600">
-            {[...new Set(participants.filter(p => p.participant_type === 'ob').map(p => p.user_id))].length}
-          </p>
-        </div>
-        <div className="bg-orange-50 rounded-xl px-4 py-3 text-center">
-          <p className="text-xs text-orange-400 mb-1">게스트</p>
-          <p className="text-2xl font-semibold text-orange-500">{guests.length}</p>
-        </div>
+        {[
+          { label: '부원', count: [...new Set(participants.filter(p => p.participant_type === 'member').map(p => p.user_id))].length, color: 'var(--accent-blue)', bg: 'rgba(27,63,171,0.15)' },
+          { label: 'OB', count: [...new Set(participants.filter(p => p.participant_type === 'ob').map(p => p.user_id))].length, color: 'var(--accent-purple)', bg: 'rgba(155,89,182,0.15)' },
+          { label: '게스트', count: guests.length, color: 'var(--accent-orange)', bg: 'rgba(230,126,34,0.15)' },
+        ].map(item => (
+          <div key={item.label} className="rounded-xl px-4 py-3 text-center"
+            style={{ background: item.bg, border: `0.5px solid ${item.color}30` }}>
+            <p className="text-2xl font-black" style={{ color: item.color }}>{item.count}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{item.label}</p>
+          </div>
+        ))}
       </div>
 
       {/* 달력 */}
@@ -291,38 +348,51 @@ export default function CampDetailPage() {
         const hasNext = currentIdx < calendarMonths.length - 1
 
         return (
-          <div className="mb-6">
+          <div className="mb-2">
+            {/* 월 네비게이션 */}
             <div className="flex items-center justify-between mb-4">
-              <button
-                onClick={() => hasPrev && setCurrentMonth(calendarMonths[currentIdx - 1])}
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-lg transition-colors ${
-                  hasPrev ? 'hover:bg-gray-100 text-gray-600' : 'text-gray-200 cursor-default'
-                }`}
-              >
+              <button onClick={() => hasPrev && setCurrentMonth(calendarMonths[currentIdx - 1])}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-lg transition-colors"
+                style={{
+                  color: hasPrev ? 'var(--text-secondary)' : 'var(--text-hint)',
+                  background: hasPrev ? 'var(--bg-card)' : 'transparent',
+                  cursor: hasPrev ? 'pointer' : 'default',
+                }}>
                 ‹
               </button>
-              <p className="text-sm font-semibold text-gray-800">{monthName}</p>
-              <button
-                onClick={() => hasNext && setCurrentMonth(calendarMonths[currentIdx + 1])}
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-lg transition-colors ${
-                  hasNext ? 'hover:bg-gray-100 text-gray-600' : 'text-gray-200 cursor-default'
-                }`}
-              >
+              <p className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>
+                {monthName}
+              </p>
+              <button onClick={() => hasNext && setCurrentMonth(calendarMonths[currentIdx + 1])}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-lg transition-colors"
+                style={{
+                  color: hasNext ? 'var(--text-secondary)' : 'var(--text-hint)',
+                  background: hasNext ? 'var(--bg-card)' : 'transparent',
+                  cursor: hasNext ? 'pointer' : 'default',
+                }}>
                 ›
               </button>
             </div>
 
+            {/* 요일 */}
             <div className="grid grid-cols-7 mb-1">
               {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
-                <div key={d} className={`text-center text-xs py-1 font-medium
-                  ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}
-                `}>
+                <div key={d} className="text-center text-xs py-1 font-black"
+                  style={{
+                    color: i === 0 ? 'rgba(255,80,80,0.4)' :
+                      i === 6 ? 'rgba(100,150,255,0.4)' : 'var(--text-hint)'
+                  }}>
                   {d}
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-1">
+            {/* 날짜 그리드 */}
+            <div
+              ref={calGridRef}
+              className="grid grid-cols-7 gap-1"
+              style={{ userSelect: 'none' }}
+            >
               {days.map((date, idx) => {
                 if (!date) return <div key={`empty-${idx}`} />
 
@@ -331,75 +401,121 @@ export default function CampDetailPage() {
                 const dayGuests = getGuestsByDate(date)
                 const total = members.length + dayGuests.length
                 const isMyDate = myParticipations.some(p => isInRange(date, p.join_date, p.leave_date))
-                const isSelected = selectedDate === date
-                const dayOfWeek = new Date(date + 'T00:00:00').getDay()
                 const dayNum = parseInt(date.split('-')[2])
+                const dayOfWeek = new Date(date + 'T00:00:00').getDay()
+
+                // 드래그 선택 범위
+                const isInDragRange = applyMode && dragLo !== null && dragHi !== null &&
+                  dayNum >= dragLo && dayNum <= dragHi && isCampDate
+                const isDragStart = applyMode && dragLo !== null && dayNum === dragLo && isCampDate
+                const isDragEnd = applyMode && dragHi !== null && dayNum === dragHi && isCampDate && dragLo !== dragHi
+
+                // 선택된 날짜
+                const isSelected = selectedDate === date && !applyMode
+
+                let bg = 'transparent'
+                let borderRadius = '8px'
+                let scale = 1
+                let shadow = 'none'
+
+                if (applyMode && isInDragRange) {
+                  bg = 'rgba(27,63,171,0.25)'
+                  borderRadius = '0'
+                  if (isDragStart) { borderRadius = '8px 0 0 8px'; bg = '#1B3FAB'; scale = 1.05; shadow = '0 4px 12px rgba(27,63,171,0.5)' }
+                  if (isDragEnd) { borderRadius = '0 8px 8px 0'; bg = '#1B3FAB'; scale = 1.05; shadow = '0 4px 12px rgba(27,63,171,0.5)' }
+                  if (isDragStart && dragLo === dragHi) { borderRadius = '8px'; bg = '#1B3FAB'; scale = 1.05 }
+                } else if (!applyMode && isMyDate && isCampDate) {
+                  bg = 'rgba(27,63,171,0.2)'
+                } else if (isSelected) {
+                  bg = '#1B3FAB'
+                  scale = 1.08
+                  shadow = '0 4px 12px rgba(27,63,171,0.5)'
+                }
 
                 return (
-                  <button
-  key={date}
-  onClick={() => isCampDate && handleDateClick(date)}
-  className={`
-    relative flex flex-col items-center py-2 rounded-xl
-    ${!isCampDate ? 'opacity-25 cursor-default' : 'cursor-pointer'}
-    ${isMyDate && isCampDate && !isSelected ? 'bg-green-100' :
-      isCampDate && !isSelected ? 'hover:bg-gray-100' : ''}
-  `}
-  style={{
-    background: isSelected ? 'var(--ski-blue)' : undefined,
-    transform: isSelected ? 'scale(1.08)' : 'scale(1)',
-    boxShadow: isSelected ? '0 4px 12px rgba(27, 63, 171, 0.35)' : 'none',
-    transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, box-shadow 0.2s ease',
-    zIndex: isSelected ? 1 : 0,
-  }}
->
-                    <span className={`text-sm font-medium
-                      ${isSelected ? 'text-white' :
-                        dayOfWeek === 0 ? 'text-red-400' :
-                        dayOfWeek === 6 ? 'text-blue-400' : 'text-gray-700'}
-                    `}>
+                  <div
+                    key={date}
+                    className="relative flex flex-col items-center py-2 cursor-pointer"
+                    style={{
+                      borderRadius,
+                      background: bg,
+                      transform: `scale(${scale})`,
+                      boxShadow: shadow,
+                      transition: 'background 0.1s, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s',
+                      opacity: isCampDate ? 1 : 0.15,
+                      zIndex: scale > 1 ? 1 : 0,
+                    }}
+                    onPointerDown={() => {
+                      if (applyMode && isCampDate) {
+                        handleCellPointerDown(date)
+                      } else if (!applyMode && isCampDate) {
+                        setSelectedDate(isSelected ? null : date)
+                        setShowPanel(!isSelected)
+                        if (camp) {
+                          setGuestJoinDate(date)
+                          setGuestLeaveDate(date)
+                        }
+                        setGuestMode(false)
+                      }
+                    }}
+                    onPointerEnter={() => handleCellPointerEnter(date)}
+                  >
+                    <span className="text-xs font-black"
+                      style={{
+                        color: (isSelected || (applyMode && isInDragRange && (isDragStart || isDragEnd)))
+                          ? '#fff'
+                          : dayOfWeek === 0 ? 'rgba(255,80,80,0.7)'
+                          : dayOfWeek === 6 ? 'rgba(100,150,255,0.7)'
+                          : 'var(--text-secondary)'
+                      }}>
                       {dayNum}
                     </span>
 
+                    {/* 참여자 도트 */}
                     {isCampDate && total > 0 && (
-                      <div className="flex gap-0.5 mt-1 flex-wrap justify-center max-w-[36px]">
+                      <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center"
+                        style={{ maxWidth: 28 }}>
                         {members.slice(0, 3).map(p => (
-                          <div key={p.id} className={`w-1.5 h-1.5 rounded-full
-                            ${isSelected ? 'bg-white opacity-80' :
-                              p.user_id === profile?.id ? 'bg-green-500' :
-                              p.participant_type === 'ob' ? 'bg-purple-400' : 'bg-blue-400'}
-                          `} />
+                          <div key={p.id} className="w-1 h-1 rounded-full"
+                            style={{
+                              background: (isSelected || (applyMode && isInDragRange))
+                                ? 'rgba(255,255,255,0.6)'
+                                : p.user_id === profile?.id ? 'var(--accent-green)'
+                                : p.participant_type === 'ob' ? 'var(--accent-purple)'
+                                : 'var(--accent-blue)'
+                            }} />
                         ))}
                         {dayGuests.slice(0, 2).map(g => (
-                          <div key={g.id} className={`w-1.5 h-1.5 rounded-full
-                            ${isSelected ? 'bg-white opacity-80' : 'bg-orange-400'}
-                          `} />
+                          <div key={g.id} className="w-1 h-1 rounded-full"
+                            style={{
+                              background: (isSelected || (applyMode && isInDragRange))
+                                ? 'rgba(255,255,255,0.6)' : 'var(--accent-orange)'
+                            }} />
                         ))}
                       </div>
                     )}
 
                     {isCampDate && total > 0 && (
-                      <span className={`text-[10px] mt-0.5 font-medium
-                        ${isSelected ? 'text-white opacity-90' : 'text-gray-400'}
-                      `}>
-                        {total}명
+                      <span className="text-[9px] mt-0.5 font-black"
+                        style={{
+                          color: (isSelected || (applyMode && isInDragRange && (isDragStart || isDragEnd)))
+                            ? 'rgba(255,255,255,0.7)' : 'var(--text-hint)'
+                        }}>
+                        {total}
                       </span>
                     )}
-                  </button>
+                  </div>
                 )
               })}
             </div>
 
+            {/* 인디케이터 */}
             {calendarMonths.length > 1 && (
               <div className="flex justify-center gap-1.5 mt-4">
                 {calendarMonths.map((m, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setCurrentMonth(m)}
-                    className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                      i === currentIdx ? 'bg-blue-600' : 'bg-gray-200 hover:bg-gray-300'
-                    }`}
-                  />
+                  <button key={i} onClick={() => setCurrentMonth(m)}
+                    className="w-1.5 h-1.5 rounded-full transition-colors"
+                    style={{ background: i === currentIdx ? 'var(--ski-blue)' : 'rgba(255,255,255,0.15)' }} />
                 ))}
               </div>
             )}
@@ -408,279 +524,343 @@ export default function CampDetailPage() {
       })()}
 
       {/* 범례 */}
-      <div className="flex gap-4 mb-6 text-xs text-gray-400 flex-wrap">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>부원</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400 inline-block"></span>OB</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block"></span>게스트</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>나</span>
-        <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-green-100 inline-block"></span>내 참여기간</span>
+      <div className="flex gap-4 mt-4 mb-2 flex-wrap">
+        {[
+          { color: 'var(--accent-blue)', label: '부원' },
+          { color: 'var(--accent-purple)', label: 'OB' },
+          { color: 'var(--accent-orange)', label: '게스트' },
+          { color: 'var(--accent-green)', label: '나' },
+        ].map(item => (
+          <span key={item.label} className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full inline-block" style={{ background: item.color }} />
+            <span className="text-xs" style={{ color: 'var(--text-hint)' }}>{item.label}</span>
+          </span>
+        ))}
       </div>
 
-      {/* 날짜 상세 패널 */}
-      {showPanel && selectedDate && (
-        <div className="border rounded-2xl p-5 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold">
-              {new Date(selectedDate + 'T00:00:00').toLocaleDateString('ko-KR', {
-                month: 'long', day: 'numeric', weekday: 'long'
-              })}
-            </h2>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-400">
-                총 {selectedMembers.length + selectedGuests.length}명
-              </span>
-              <button
-                onClick={() => setShowPanel(false)}
-                className="text-gray-300 hover:text-gray-500 text-lg leading-none"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
+      {/* 날짜 상세 패널 — 슬라이드업 */}
+      {showPanel && selectedDate && !applyMode && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            style={{ background: 'rgba(0,0,0,0.6)' }}
+            onClick={() => setShowPanel(false)}
+          />
+          <div
+            className="fixed bottom-0 left-0 right-0 z-50 max-w-lg mx-auto"
+            style={{
+              background: 'var(--bg-secondary)',
+              borderRadius: '20px 20px 0 0',
+              borderTop: '0.5px solid var(--border-secondary)',
+              animation: 'slideUp 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
+            }}
+          >
+            <style>{`
+              @keyframes slideUp {
+                from { transform: translateY(100%); }
+                to { transform: translateY(0); }
+              }
+            `}</style>
 
-          {selectedMembers.length > 0 && (
-            <div className="mb-4">
-              <p className="text-xs text-gray-400 mb-2">부원 · OB</p>
-              <div className="flex flex-col gap-2">
-                {selectedMembers.map(p => (
-                  <div key={p.id} className="flex items-center gap-2.5">
-                    <div className={`w-7 h-7 rounded-full text-white text-xs font-medium flex items-center justify-center flex-shrink-0
-                      ${p.user_id === profile?.id ? 'bg-green-500' :
-                        p.participant_type === 'ob' ? 'bg-purple-400' : 'bg-blue-400'}
-                    `}>
-                      {p.profiles?.name?.[0] ?? '?'}
-                    </div>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium">{p.profiles?.name}</span>
-                      <span className="text-xs text-gray-400 ml-1.5">{p.profiles?.generation}기</span>
-                      {p.participant_type === 'ob' && (
-                        <span className="text-xs text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded-full ml-1.5">OB</span>
-                      )}
-                      {p.label && (
-                        <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full ml-1.5">{p.label}</span>
-                      )}
-                      {p.memo && <p className="text-xs text-gray-400 mt-0.5">{p.memo}</p>}
-                    </div>
-                    <span className="text-xs text-gray-300 flex-shrink-0">
-                      ~{p.leave_date.slice(5)}
-                    </span>
-                  </div>
-                ))}
+            <div className="w-9 h-1 rounded-full mx-auto mt-3 mb-4"
+              style={{ background: 'rgba(255,255,255,0.15)' }} />
+
+            <div className="px-5 pb-safe">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>
+                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString('ko-KR', {
+                    month: 'long', day: 'numeric', weekday: 'long'
+                  })}
+                </h2>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                    총 {selectedMembers.length + selectedGuests.length}명
+                  </span>
+                  <button onClick={() => setShowPanel(false)}
+                    className="text-lg leading-none" style={{ color: 'var(--text-hint)' }}>
+                    ✕
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
 
-          {selectedGuests.length > 0 && (
-            <div className="mb-4">
-              <p className="text-xs text-gray-400 mb-2">게스트</p>
-              <div className="flex flex-col gap-2">
-                {selectedGuests.map(g => (
-                  <div key={g.id} className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-full bg-orange-300 text-white text-xs font-medium flex items-center justify-center flex-shrink-0">
-                      {g.name[0]}
-                    </div>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium">{g.name}</span>
-                      <span className="text-xs text-gray-400 ml-1.5">{g.fee.toLocaleString()}원</span>
-                    </div>
-                    {profile?.role === 'admin' && (
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button
-                          onClick={() => toggleFeePaid(g.id, g.fee_paid)}
-                          className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${
-                            g.fee_paid
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-gray-100 text-gray-500 hover:bg-green-50 hover:text-green-600'
-                          }`}
-                        >
-                          {g.fee_paid ? '수납완료' : '미수납'}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteGuest(g.id)}
-                          className="text-gray-300 hover:text-red-400 text-sm"
-                        >
-                          ✕
-                        </button>
+              {/* 부원·OB */}
+              {selectedMembers.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-black tracking-widest uppercase mb-2"
+                    style={{ color: 'var(--text-hint)' }}>부원 · OB</p>
+                  <div className="flex flex-col gap-2">
+                    {selectedMembers.map(p => (
+                      <div key={p.id} className="flex items-center gap-2.5">
+                        {p.profiles?.avatar_url ? (
+                          <img src={p.profiles.avatar_url} alt=""
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
+                            style={{
+                              background: p.user_id === profile?.id ? 'var(--accent-green)' :
+                                p.participant_type === 'ob' ? 'rgba(155,89,182,0.5)' : 'var(--ski-blue)'
+                            }}>
+                            {p.profiles?.name?.[0] ?? '?'}
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                            {p.profiles?.name}
+                          </span>
+                          <span className="text-xs ml-1.5" style={{ color: 'var(--text-hint)' }}>
+                            {p.profiles?.generation}기
+                          </span>
+                          {p.participant_type === 'ob' && (
+                            <span className="text-xs font-black ml-1.5 px-1.5 py-0.5 rounded-full"
+                              style={{ background: 'rgba(155,89,182,0.2)', color: 'var(--accent-purple)' }}>
+                              OB
+                            </span>
+                          )}
+                          {p.label && (
+                            <span className="text-xs font-black ml-1.5 px-1.5 py-0.5 rounded-full"
+                              style={{ background: 'rgba(46,204,113,0.15)', color: 'var(--accent-green)' }}>
+                              {p.label}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                          ~{p.leave_date.slice(5)}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {selectedMembers.length === 0 && selectedGuests.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-4">이 날 참여자가 없어요</p>
-          )}
-
-          {profile?.role === 'admin' && (
-            <div className="border-t pt-4 mt-2">
-              {!guestMode ? (
-                <button
-                  onClick={() => setGuestMode(true)}
-                  className="w-full text-sm border border-blue-200 rounded-xl py-2.5 hover:bg-blue-50 transition-colors"
-                  style={{ color: 'var(--ski-blue)' }}
-                >
-                  + 게스트 추가
-                </button>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs font-medium text-gray-500 mb-1">게스트 추가</p>
-                  <input type="text" placeholder="이름" value={guestName}
-                    onChange={e => setGuestName(e.target.value)}
-                    className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
-                  <input type="tel" placeholder="연락처 (선택)" value={guestPhone}
-                    onChange={e => setGuestPhone(e.target.value)}
-                    className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-xs text-gray-400 mb-1 block">도착일</label>
-                      <input type="date" value={guestJoinDate}
-                        min={camp.start_date} max={camp.end_date}
-                        onChange={e => setGuestJoinDate(e.target.value)}
-                        className="w-full border rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400 mb-1 block">출발일</label>
-                      <input type="date" value={guestLeaveDate}
-                        min={guestJoinDate} max={camp.end_date}
-                        onChange={e => setGuestLeaveDate(e.target.value)}
-                        className="w-full border rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400" />
-                    </div>
-                  </div>
-                  <input type="number" placeholder="게스트비" value={guestFee}
-                    onChange={e => setGuestFee(e.target.value)}
-                    className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
-                  <div className="flex gap-2">
-                    <button onClick={handleAddGuest} disabled={submitting || !guestName}
-                      className="flex-1 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50"
-                      style={{ background: 'var(--ski-blue)' }}>
-                      {submitting ? '추가 중...' : '추가'}
-                    </button>
-                    <button onClick={() => { setGuestMode(false); setGuestName(''); setGuestPhone('') }}
-                      className="px-4 bg-gray-100 text-gray-600 rounded-xl py-2.5 text-sm hover:bg-gray-200">
-                      취소
-                    </button>
+                    ))}
                   </div>
                 </div>
               )}
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* 내 참여 일정 */}
-      {canApply && (
-        <div className="border rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-medium">내 참여 일정</h2>
-            {!addMode && (
-              <button
-                onClick={() => setAddMode(true)}
-                className="text-xs hover:underline"
-                style={{ color: 'var(--ski-blue)' }}
-              >
-                + 일정 추가
-              </button>
-            )}
-          </div>
-
-          {myParticipations.length === 0 && !addMode && (
-            <p className="text-sm text-gray-400 text-center py-4">
-              아직 신청한 일정이 없어요
-            </p>
-          )}
-
-          {myParticipations.length > 0 && (
-            <div className="flex flex-col gap-2 mb-4">
-              {myParticipations.map(p => {
-                const n = getNights(p.join_date, p.leave_date)
-                return (
-                  <div key={p.id} className="flex items-center gap-3 bg-green-50 rounded-xl px-4 py-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-                          {p.label ?? '1차'}
-                        </span>
-                        <span className="text-sm text-gray-700">
-                          {p.join_date} ~ {p.leave_date}
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {n > 0 ? `${n}박 ${n + 1}일` : '당일'}
-                        </span>
+              {/* 게스트 */}
+              {selectedGuests.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-black tracking-widest uppercase mb-2"
+                    style={{ color: 'var(--text-hint)' }}>게스트</p>
+                  <div className="flex flex-col gap-2">
+                    {selectedGuests.map(g => (
+                      <div key={g.id} className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
+                          style={{ background: 'rgba(230,126,34,0.4)' }}>
+                          {g.name[0]}
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                            {g.name}
+                          </span>
+                          <span className="text-xs ml-1.5" style={{ color: 'var(--text-hint)' }}>
+                            {g.fee.toLocaleString()}원
+                          </span>
+                        </div>
+                        {profile?.role === 'admin' && (
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => toggleFeePaid(g.id, g.fee_paid)}
+                              className="text-xs font-black px-2.5 py-1 rounded-lg btn-press"
+                              style={{
+                                background: g.fee_paid ? 'rgba(46,204,113,0.2)' : 'rgba(255,255,255,0.06)',
+                                color: g.fee_paid ? 'var(--accent-green)' : 'var(--text-tertiary)',
+                              }}>
+                              {g.fee_paid ? '수납완료' : '미수납'}
+                            </button>
+                            <button onClick={() => handleDeleteGuest(g.id)}
+                              className="text-sm" style={{ color: 'rgba(255,107,107,0.4)' }}>
+                              ✕
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      {p.memo && (
-                        <p className="text-xs text-gray-400 mt-0.5">{p.memo}</p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleDeleteParticipation(p.id)}
-                      className="text-gray-300 hover:text-red-400 text-sm flex-shrink-0"
-                    >
-                      ✕
-                    </button>
+                    ))}
                   </div>
-                )
-              })}
-            </div>
-          )}
+                </div>
+              )}
 
-          {addMode && (
-            <div className="flex flex-col gap-3 border-t pt-4">
-              <p className="text-xs text-gray-400">추가할 참여 구간을 선택해주세요</p>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">구간 이름 (선택)</label>
-                <input type="text"
-                  placeholder={`${myParticipations.length + 1}차 (자동 입력)`}
-                  value={newLabel} onChange={e => setNewLabel(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">도착일</label>
-                  <input type="date" value={newJoinDate}
-                    min={camp.start_date} max={camp.end_date}
-                    onChange={e => setNewJoinDate(e.target.value)}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">출발일</label>
-                  <input type="date" value={newLeaveDate}
-                    min={newJoinDate || camp.start_date} max={camp.end_date}
-                    onChange={e => setNewLeaveDate(e.target.value)}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
-                </div>
-              </div>
-              {newJoinDate && newLeaveDate && (
-                <p className="text-xs" style={{ color: 'var(--ski-blue)' }}>
-                  {getNights(newJoinDate, newLeaveDate) > 0
-                    ? `${getNights(newJoinDate, newLeaveDate)}박 ${getNights(newJoinDate, newLeaveDate) + 1}일`
-                    : '당일 참여'}
+              {selectedMembers.length === 0 && selectedGuests.length === 0 && (
+                <p className="text-sm text-center py-4" style={{ color: 'var(--text-hint)' }}>
+                  이 날 참여자가 없어요
                 </p>
               )}
-              <input type="text" placeholder="메모 (늦게 도착, 일찍 출발 등)"
-                value={newMemo} onChange={e => setNewMemo(e.target.value)}
-                className="border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
+
+              {/* 게스트 추가 (운영진) */}
+              {profile?.role === 'admin' && (
+                <div className="pt-4" style={{ borderTop: '0.5px solid var(--border-primary)' }}>
+                  {!guestMode ? (
+                    <button onClick={() => setGuestMode(true)}
+                      className="w-full text-sm font-black py-2.5 rounded-xl btn-press"
+                      style={{
+                        background: 'rgba(27,63,171,0.15)',
+                        border: '0.5px solid rgba(27,63,171,0.3)',
+                        color: 'var(--accent-blue)',
+                      }}>
+                      + 게스트 추가
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs font-black tracking-widest uppercase mb-1"
+                        style={{ color: 'var(--text-hint)' }}>게스트 추가</p>
+                      {[
+                        { placeholder: '이름', value: guestName, onChange: setGuestName, type: 'text' },
+                        { placeholder: '연락처 (선택)', value: guestPhone, onChange: setGuestPhone, type: 'tel' },
+                      ].map((field, i) => (
+                        <input key={i} type={field.type} placeholder={field.placeholder}
+                          value={field.value} onChange={e => field.onChange(e.target.value)}
+                          className="rounded-xl px-3 py-2.5 text-sm"
+                          style={{
+                            background: 'var(--bg-tertiary)',
+                            border: '0.5px solid var(--border-primary)',
+                            color: 'var(--text-primary)',
+                          }} />
+                      ))}
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { label: '도착일', value: guestJoinDate, onChange: setGuestJoinDate },
+                          { label: '출발일', value: guestLeaveDate, onChange: setGuestLeaveDate },
+                        ].map(field => (
+                          <div key={field.label}>
+                            <label className="text-xs mb-1 block" style={{ color: 'var(--text-hint)' }}>
+                              {field.label}
+                            </label>
+                            <input type="date" value={field.value}
+                              min={camp.start_date} max={camp.end_date}
+                              onChange={e => field.onChange(e.target.value)}
+                              className="w-full rounded-xl px-3 py-2 text-sm"
+                              style={{
+                                background: 'var(--bg-tertiary)',
+                                border: '0.5px solid var(--border-primary)',
+                                color: 'var(--text-primary)',
+                              }} />
+                          </div>
+                        ))}
+                      </div>
+                      <input type="number" placeholder="게스트비" value={guestFee}
+                        onChange={e => setGuestFee(e.target.value)}
+                        className="rounded-xl px-3 py-2.5 text-sm"
+                        style={{
+                          background: 'var(--bg-tertiary)',
+                          border: '0.5px solid var(--border-primary)',
+                          color: 'var(--text-primary)',
+                        }} />
+                      <div className="flex gap-2">
+                        <button onClick={handleAddGuest} disabled={submitting || !guestName}
+                          className="flex-1 text-white rounded-xl py-2.5 text-sm font-black disabled:opacity-50 btn-press"
+                          style={{ background: 'var(--ski-blue)' }}>
+                          {submitting ? '추가 중...' : '추가'}
+                        </button>
+                        <button onClick={() => { setGuestMode(false); setGuestName(''); setGuestPhone('') }}
+                          className="px-4 rounded-xl py-2.5 text-sm font-black btn-press"
+                          style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-tertiary)' }}>
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="pb-6" />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 고정 하단 바 */}
+      {canApply && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 max-w-lg mx-auto"
+          style={{
+            background: 'rgba(22,22,30,0.95)',
+            backdropFilter: 'blur(12px)',
+            borderTop: '0.5px solid var(--border-primary)',
+            padding: '12px 20px 28px',
+          }}
+        >
+          {!applyMode ? (
+            /* 일반 모드 */
+            <div>
+              {myParticipations.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs font-black tracking-widest uppercase mb-2"
+                    style={{ color: 'var(--text-hint)' }}>내 참여 일정</p>
+                  <div className="flex flex-col gap-1.5">
+                    {myParticipations.map(p => {
+                      const n = getNights(p.join_date, p.leave_date)
+                      return (
+                        <div key={p.id} className="flex items-center gap-2 rounded-xl px-3 py-2"
+                          style={{ background: 'rgba(27,63,171,0.15)', border: '0.5px solid rgba(27,63,171,0.3)' }}>
+                          <span className="text-xs font-black px-1.5 py-0.5 rounded-full"
+                            style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
+                            {p.label ?? '1차'}
+                          </span>
+                          <span className="text-xs font-bold flex-1" style={{ color: 'var(--accent-blue)' }}>
+                            {p.join_date.slice(5)} — {p.leave_date.slice(5)}
+                            <span className="font-normal ml-1" style={{ color: 'var(--text-hint)' }}>
+                              {n > 0 ? `${n}박` : '당일'}
+                            </span>
+                          </span>
+                          <button onClick={() => handleDeleteParticipation(p.id)}
+                            className="text-xs" style={{ color: 'rgba(255,107,107,0.5)' }}>
+                            ✕
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              <button onClick={() => {
+                setApplyMode(true)
+                setDragStart(null)
+                setDragEnd(null)
+                setShowPanel(false)
+              }}
+                className="w-full text-white rounded-xl py-3 text-sm font-black btn-press"
+                style={{ background: 'var(--ski-blue)' }}>
+                + 일정 추가
+              </button>
+            </div>
+          ) : (
+            /* 드래그 선택 모드 */
+            <div>
+              <p className="text-xs font-black tracking-widest uppercase mb-3"
+                style={{ color: 'var(--text-hint)' }}>
+                달력에서 드래그해서 기간을 선택하세요
+              </p>
               <div className="flex gap-2">
-                <button onClick={handleAddParticipation}
-                  disabled={submitting || !newJoinDate || !newLeaveDate}
-                  className="flex-1 text-white rounded-xl py-3 text-sm font-medium disabled:opacity-50"
+                <div className="flex-1 rounded-xl px-4 py-2.5"
+                  style={{
+                    background: dragStart !== null ? 'rgba(27,63,171,0.2)' : 'rgba(255,255,255,0.04)',
+                    border: `0.5px solid ${dragStart !== null ? 'rgba(27,63,171,0.4)' : 'var(--border-primary)'}`,
+                  }}>
+                  {dragStart !== null ? (
+                    <>
+                      <p className="text-sm font-black" style={{ color: 'var(--accent-blue)' }}>
+                        {dragJoinDate.slice(5)} — {dragLeaveDate.slice(5)}
+                      </p>
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                        {dragNights > 0 ? `${dragNights}박 ${dragNights + 1}일` : '당일'}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
+                      시작일을 터치하세요
+                    </p>
+                  )}
+                </div>
+                <button onClick={handleConfirmApply}
+                  disabled={submitting || dragStart === null}
+                  className="text-white rounded-xl px-5 text-sm font-black disabled:opacity-40 btn-press"
                   style={{ background: 'var(--ski-blue)' }}>
-                  {submitting ? '추가 중...' : '일정 추가'}
+                  {submitting ? '...' : '확정'}
                 </button>
-                <button onClick={() => { setAddMode(false); setNewLabel(''); setNewMemo('') }}
-                  className="px-4 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm hover:bg-gray-200">
+                <button onClick={() => {
+                  setApplyMode(false)
+                  setDragStart(null)
+                  setDragEnd(null)
+                }}
+                  className="rounded-xl px-4 text-sm font-black btn-press"
+                  style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-tertiary)' }}>
                   취소
                 </button>
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {!canApply && (
-        <div className="bg-gray-50 rounded-2xl px-5 py-4 text-center">
-          <p className="text-sm text-gray-400">신청이 마감됐어요</p>
         </div>
       )}
     </main>

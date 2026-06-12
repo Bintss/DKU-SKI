@@ -19,10 +19,10 @@ type Event = {
 }
 
 const EVENT_TYPE_LABEL: Record<string, string> = {
-  daytrip: '당일',
-  training: '훈련',
-  ob_invite: 'OB',
-  etc: '기타',
+  daytrip: 'Day Trip',
+  training: 'Training',
+  ob_invite: 'OB Event',
+  etc: 'Event',
 }
 
 const EVENT_TYPE_COLOR: Record<string, string> = {
@@ -43,12 +43,10 @@ export default function EventsPage() {
     const fetchData = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-
       const [{ data: profileData }, { data: eventsData }] = await Promise.all([
         supabase.from('profiles').select('role').eq('id', user.id).single(),
         supabase.from('events').select('*').order('start_date', { ascending: tab === 'upcoming' }),
       ])
-
       setProfile(profileData)
       setEvents(eventsData ?? [])
       setLoading(false)
@@ -71,20 +69,14 @@ export default function EventsPage() {
     return `D-${diff}`
   }
 
-  const formatMonth = (dateStr: string) => {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString('ko-KR', { month: 'short' })
-  }
+  const formatMonth = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('ko-KR', { month: 'short' })
 
-  const formatDay = (dateStr: string) => {
-    return new Date(dateStr).getDate()
-  }
+  const formatDay = (dateStr: string) => new Date(dateStr).getDate()
 
-  const formatWeekday = (dateStr: string) => {
-    return new Date(dateStr + 'T00:00:00').toLocaleDateString('ko-KR', { weekday: 'short' })
-  }
+  const formatWeekday = (dateStr: string) =>
+    new Date(dateStr + 'T00:00:00').toLocaleDateString('ko-KR', { weekday: 'short' })
 
-  // 월별 그룹
   const grouped = filtered.reduce((acc, event) => {
     const month = new Date(event.start_date).toLocaleDateString('ko-KR', {
       year: 'numeric', month: 'long'
@@ -96,60 +88,54 @@ export default function EventsPage() {
 
   if (loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      <div className="h-8 bg-gray-200 rounded-full w-16 mb-5 animate-pulse" />
+      <div className="h-8 rounded-full w-16 mb-5 animate-pulse"
+        style={{ background: 'rgba(255,255,255,0.06)' }} />
       <SkeletonList count={3} />
     </main>
   )
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      {/* 헤더 */}
       <div className="flex items-end justify-between mb-6">
         <div>
-          <p className="text-xs font-semibold tracking-widest text-gray-400 uppercase mb-1">
-            Schedule
-          </p>
-          <h1 className="text-3xl font-black text-gray-900 leading-tight">행사</h1>
+          <p className="text-xs font-black tracking-widest uppercase mb-1"
+            style={{ color: 'var(--text-hint)' }}>Schedule</p>
+          <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>행사</h1>
         </div>
         {profile?.role === 'admin' && (
-          <a
-            href="/admin/events/new"
-            className="text-xs font-semibold text-white px-4 py-2 rounded-xl"
-            style={{ background: 'var(--ski-blue)' }}
-          >
+          <a href="/admin/events/new"
+            className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press"
+            style={{ background: 'var(--ski-blue)' }}>
             + 등록
           </a>
         )}
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-4 mb-6 border-b">
+      <div className="flex gap-4 mb-6" style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
         {[
           { value: 'upcoming', label: '예정' },
           { value: 'past', label: '지난 행사' },
         ].map(t => (
-          <button
-            key={t.value}
-            onClick={() => setTab(t.value as 'upcoming' | 'past')}
-            className={`pb-3 text-sm font-semibold transition-colors relative ${
-              tab === t.value ? 'text-gray-900' : 'text-gray-400'
-            }`}
-          >
+          <button key={t.value} onClick={() => setTab(t.value as 'upcoming' | 'past')}
+            className="pb-3 text-sm font-black transition-colors relative"
+            style={{ color: tab === t.value ? 'var(--text-primary)' : 'var(--text-hint)' }}>
             {t.label}
             {tab === t.value && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                style={{ background: 'var(--ski-blue)' }}
-              />
+                style={{ background: 'var(--ski-blue)' }} />
             )}
           </button>
         ))}
       </div>
 
-      {/* 행사 목록 — 타임라인 */}
+      {/* 타임라인 */}
       {Object.keys(grouped).length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-4xl font-black text-gray-100 mb-2">ALL CLEAR</p>
-          <p className="text-sm text-gray-400">
+          <p className="text-4xl font-black mb-2" style={{ color: 'rgba(255,255,255,0.05)' }}>
+            ALL CLEAR
+          </p>
+          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
             {tab === 'upcoming' ? '예정된 행사가 없어요' : '지난 행사가 없어요'}
           </p>
         </div>
@@ -157,64 +143,62 @@ export default function EventsPage() {
         <div className="flex flex-col gap-8">
           {Object.entries(grouped).map(([month, monthEvents]) => (
             <div key={month}>
-              {/* 월 헤더 */}
-              <p className="text-xs font-black tracking-widest text-gray-400 uppercase mb-4">
-                {month}
-              </p>
-
+              <p className="text-xs font-black tracking-widest uppercase mb-4"
+                style={{ color: 'var(--text-hint)' }}>{month}</p>
               <div className="flex flex-col gap-2">
                 {monthEvents.map(event => {
                   const deadline = daysLeft(event.deadline)
                   const typeColor = EVENT_TYPE_COLOR[event.type] ?? '#1B3FAB'
-                  const typeLabel = EVENT_TYPE_LABEL[event.type] ?? '기타'
+                  const typeLabel = EVENT_TYPE_LABEL[event.type] ?? 'Event'
 
                   return (
-                    <a
-                      key={event.id}
-                      href={event.type === 'camp'
-                        ? `/events/${event.id}/calendar`
-                        : `/events/${event.id}`}
-                      className="flex items-center gap-4 p-4 rounded-2xl bg-white border hover:border-gray-300 transition-colors card-hover btn-press"
-                    >
+                    <a key={event.id}
+                      href={`/events/${event.id}`}
+                      className="flex items-center gap-4 p-4 rounded-2xl card-hover btn-press"
+                      style={{
+                        background: 'var(--bg-card)',
+                        border: '0.5px solid var(--border-primary)',
+                      }}>
                       {/* 날짜 블록 */}
                       <div className="flex-shrink-0 w-12 text-center">
-                        <p className="text-xs font-semibold text-gray-400 uppercase">
+                        <p className="text-xs font-black uppercase"
+                          style={{ color: 'var(--text-hint)' }}>
                           {formatMonth(event.start_date)}
                         </p>
-                        <p className="text-2xl font-black text-gray-900 leading-tight">
+                        <p className="text-2xl font-black leading-tight"
+                          style={{ color: 'var(--text-primary)' }}>
                           {formatDay(event.start_date)}
                         </p>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
                           {formatWeekday(event.start_date)}
                         </p>
                       </div>
 
-                      {/* 구분선 */}
-                      <div
-                        className="w-0.5 h-12 rounded-full flex-shrink-0"
-                        style={{ background: typeColor }}
-                      />
+                      {/* 컬러 구분선 */}
+                      <div className="w-0.5 h-12 rounded-full flex-shrink-0"
+                        style={{ background: typeColor }} />
 
                       {/* 내용 */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span
-                            className="text-xs font-bold px-2 py-0.5 rounded-full"
-                            style={{ background: `${typeColor}15`, color: typeColor }}
-                          >
+                          <span className="text-xs font-black px-2 py-0.5 rounded-full"
+                            style={{ background: `${typeColor}20`, color: typeColor }}>
                             {typeLabel}
                           </span>
                           {deadline && (
-                            <span className="text-xs font-semibold text-orange-500">
+                            <span className="text-xs font-black"
+                              style={{ color: 'var(--accent-orange)' }}>
                               {deadline}
                             </span>
                           )}
                         </div>
-                        <p className="text-sm font-bold text-gray-900 truncate">
+                        <p className="text-sm font-black truncate"
+                          style={{ color: 'var(--text-primary)' }}>
                           {event.title}
                         </p>
                         {event.location && (
-                          <p className="text-xs text-gray-400 mt-0.5 truncate">
+                          <p className="text-xs mt-0.5 truncate"
+                            style={{ color: 'var(--text-hint)' }}>
                             {event.location}
                           </p>
                         )}
@@ -222,11 +206,13 @@ export default function EventsPage() {
 
                       {/* 신청 상태 */}
                       <div className="flex-shrink-0">
-                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                          event.is_open
-                            ? 'bg-green-50 text-green-600'
-                            : 'bg-gray-100 text-gray-400'
-                        }`}>
+                        <span className="text-xs font-black px-2.5 py-1 rounded-full"
+                          style={{
+                            background: event.is_open
+                              ? 'rgba(46,204,113,0.15)' : 'rgba(255,255,255,0.06)',
+                            color: event.is_open
+                              ? 'var(--accent-green)' : 'var(--text-hint)',
+                          }}>
                           {event.is_open ? '신청 중' : '마감'}
                         </span>
                       </div>

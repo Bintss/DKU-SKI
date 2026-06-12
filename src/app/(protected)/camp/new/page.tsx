@@ -19,6 +19,12 @@ export default function NewCampPage() {
   const router = useRouter()
   const supabase = createClient()
 
+  const inputStyle = {
+    background: 'var(--bg-secondary)',
+    border: '0.5px solid var(--border-primary)',
+    color: 'var(--text-primary)',
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -28,151 +34,95 @@ export default function NewCampPage() {
     if (!user) { router.push('/login'); return }
 
     const { error } = await supabase.from('camps').insert({
-      title,
-      season,
-      start_date: startDate,
-      end_date: endDate,
-      location: location || null,
-      description: description || null,
+      title, season,
+      start_date: startDate, end_date: endDate,
+      location: location || null, description: description || null,
       max_participants: maxParticipants ? parseInt(maxParticipants) : null,
       guest_fee: parseInt(guestFee),
       deadline: deadline ? new Date(deadline).toISOString() : null,
-      is_open: true,
-      created_by: user.id,
+      is_open: true, created_by: user.id,
     })
 
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
-    }
-
+    if (error) { setError(error.message); setLoading(false); return }
     router.push('/camp')
   }
 
   return (
-    <main className="max-w-lg mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">합숙 등록</h1>
-        <a href="/camp" className="text-xs text-gray-400 hover:text-gray-600">← 취소</a>
+    <main className="max-w-lg mx-auto px-4 pb-10">
+      <div className="mb-6">
+        <p className="text-xs font-black tracking-widest uppercase mb-1"
+          style={{ color: 'var(--text-hint)' }}>Ski Camp</p>
+        <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>합숙 등록</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {/* 시즌 */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block">시즌</label>
-          <input
-            type="text"
-            placeholder="예: 2026-27"
-            value={season}
-            onChange={e => setSeason(e.target.value)}
-            className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
+        {[
+          { label: '시즌', value: season, onChange: setSeason, placeholder: '예: 2026-27', type: 'text' },
+          { label: '합숙명', value: title, onChange: setTitle, placeholder: '예: 2026-27 동계 전지훈련', type: 'text' },
+          { label: '장소', value: location, onChange: setLocation, placeholder: '예: 하이원 리조트', type: 'text' },
+        ].map(field => (
+          <div key={field.label}>
+            <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+              style={{ color: 'var(--text-hint)' }}>{field.label}</label>
+            <input type={field.type} placeholder={field.placeholder} value={field.value}
+              onChange={e => field.onChange(e.target.value)}
+              className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle}
+              required={field.label !== '장소'} />
+          </div>
+        ))}
 
-        {/* 제목 */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block">합숙명</label>
-          <input
-            type="text"
-            placeholder="예: 2026-27 동계 전지훈련"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
-
-        {/* 날짜 */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">시작일</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
-              className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
+            <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+              style={{ color: 'var(--text-hint)' }}>시작일</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+              className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">종료일</label>
-            <input
-              type="date"
-              value={endDate}
+            <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+              style={{ color: 'var(--text-hint)' }}>종료일</label>
+            <input type="date" value={endDate} min={startDate}
               onChange={e => setEndDate(e.target.value)}
-              className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
+              className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
           </div>
         </div>
 
-        {/* 장소 */}
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block">장소</label>
-          <input
-            type="text"
-            placeholder="예: 하이원 리조트"
-            value={location}
-            onChange={e => setLocation(e.target.value)}
-            className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+            style={{ color: 'var(--text-hint)' }}>설명</label>
+          <textarea placeholder="합숙에 대한 간단한 설명" value={description}
+            onChange={e => setDescription(e.target.value)} rows={3}
+            className="w-full rounded-xl px-4 py-3 text-sm resize-none" style={inputStyle} />
         </div>
 
-        {/* 설명 */}
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block">설명</label>
-          <textarea
-            placeholder="합숙에 대한 간단한 설명"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            rows={3}
-            className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-          />
+          <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+            style={{ color: 'var(--text-hint)' }}>신청 마감일</label>
+          <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)}
+            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
         </div>
 
-        {/* 신청 마감일 */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block">신청 마감일</label>
-          <input
-            type="datetime-local"
-            value={deadline}
-            onChange={e => setDeadline(e.target.value)}
-            className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* 최대 인원 · 게스트비 */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">최대 인원</label>
-            <input
-              type="number"
-              placeholder="없으면 비워두세요"
-              value={maxParticipants}
+            <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+              style={{ color: 'var(--text-hint)' }}>최대 인원</label>
+            <input type="number" placeholder="없으면 비워두세요" value={maxParticipants}
               onChange={e => setMaxParticipants(e.target.value)}
-              className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
+              className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">게스트비 (원)</label>
-            <input
-              type="number"
-              value={guestFee}
-              onChange={e => setGuestFee(e.target.value)}
-              className="w-full border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+              style={{ color: 'var(--text-hint)' }}>게스트비 (원)</label>
+            <input type="number" value={guestFee} onChange={e => setGuestFee(e.target.value)}
+              className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
           </div>
         </div>
 
-        {error && <p className="text-red-500 text-xs">{error}</p>}
+        {error && <p className="text-xs" style={{ color: 'var(--accent-red)' }}>{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="bg-blue-600 text-white rounded-xl py-3.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 mt-2"
-        >
+        <button type="submit" disabled={loading}
+          className="w-full text-white rounded-xl py-3.5 text-sm font-black disabled:opacity-50 btn-press"
+          style={{ background: 'var(--ski-blue)' }}>
           {loading ? '등록 중...' : '합숙 등록'}
         </button>
       </form>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { SkeletonList } from '@/components/Skeleton'
+
 type Profile = {
   id: string
   name: string
@@ -42,21 +43,15 @@ export default function MembersPage() {
     fetchData()
   }, [])
 
-  // 기수 목록
   const generations = [...new Set(members.map(m => m.generation))].sort((a, b) => b - a)
 
-  // 필터링
   const filtered = members.filter(m => {
-    const matchSearch = m.name.includes(search) ||
-      String(m.generation).includes(search)
-    const matchType = filterType === 'all' || m.join_type === filterType ||
-      (filterType === 'student' && m.join_type === 'student') ||
-      (filterType === 'ob' && m.join_type === 'ob')
+    const matchSearch = m.name.includes(search) || String(m.generation).includes(search)
+    const matchType = filterType === 'all' || m.join_type === filterType
     const matchGen = selectedGeneration === null || m.generation === selectedGeneration
     return matchSearch && matchType && matchGen
   })
 
-  // 기수별 그룹
   const grouped = filtered.reduce((acc, m) => {
     const gen = m.generation
     if (!acc[gen]) acc[gen] = []
@@ -69,21 +64,32 @@ export default function MembersPage() {
   }
 
   const roleColor: Record<string, string> = {
-    member: 'bg-blue-50 text-blue-600',
-    ob: 'bg-purple-50 text-purple-600',
-    admin: 'bg-orange-50 text-orange-600',
+    member: 'rgba(27,63,171,0.3)',
+    ob: 'rgba(155,89,182,0.3)',
+    admin: 'rgba(230,126,34,0.3)',
+  }
+
+  const roleTextColor: Record<string, string> = {
+    member: 'var(--accent-blue)',
+    ob: 'var(--accent-purple)',
+    admin: 'var(--accent-orange)',
   }
 
   if (loading) return (
-  <main className="max-w-lg mx-auto px-4 pb-10">
-    <div className="h-7 bg-gray-200 rounded-full w-24 mb-5 animate-pulse" />
-    <SkeletonList count={4} />
-  </main>
-)
+    <main className="max-w-lg mx-auto px-4 pb-10">
+      <div className="h-8 rounded-full w-32 mb-5 animate-pulse"
+        style={{ background: 'rgba(255,255,255,0.06)' }} />
+      <SkeletonList count={5} />
+    </main>
+  )
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      <h1 className="text-lg font-semibold text-gray-900 mb-5">동문 디렉토리</h1>
+      <div className="mb-6">
+        <p className="text-xs font-black tracking-widest uppercase mb-1"
+          style={{ color: 'var(--text-hint)' }}>Directory</p>
+        <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>동문 디렉토리</h1>
+      </div>
 
       {/* 검색 */}
       <input
@@ -91,57 +97,46 @@ export default function MembersPage() {
         placeholder="이름, 기수 검색"
         value={search}
         onChange={e => setSearch(e.target.value)}
-        className="w-full bg-white border rounded-xl px-4 py-3 text-sm outline-none mb-3 focus:border-blue-400"
-        style={{ borderColor: 'var(--gray-200)' }}
+        className="w-full rounded-xl px-4 py-3 text-sm mb-3"
+        style={{
+          background: 'var(--bg-secondary)',
+          border: '0.5px solid var(--border-primary)',
+          color: 'var(--text-primary)',
+        }}
       />
 
-      {/* 필터 */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-        <button
-          onClick={() => setFilterType('all')}
-          className={`text-xs px-3 py-1.5 rounded-full flex-shrink-0 transition-colors ${
-            filterType === 'all'
-              ? 'text-white'
-              : 'bg-white border text-gray-500 hover:border-gray-300'
-          }`}
-          style={filterType === 'all' ? { background: 'var(--ski-blue)' } : {}}
-        >
-          전체 {members.length}명
-        </button>
-        <button
-          onClick={() => setFilterType('student')}
-          className={`text-xs px-3 py-1.5 rounded-full flex-shrink-0 transition-colors ${
-            filterType === 'student'
-              ? 'text-white'
-              : 'bg-white border text-gray-500 hover:border-gray-300'
-          }`}
-          style={filterType === 'student' ? { background: 'var(--ski-blue)' } : {}}
-        >
-          재학생 {members.filter(m => m.join_type === 'student').length}명
-        </button>
-        <button
-          onClick={() => setFilterType('ob')}
-          className={`text-xs px-3 py-1.5 rounded-full flex-shrink-0 transition-colors ${
-            filterType === 'ob'
-              ? 'text-white'
-              : 'bg-white border text-gray-500 hover:border-gray-300'
-          }`}
-          style={filterType === 'ob' ? { background: 'var(--ski-blue)' } : {}}
-        >
-          OB {members.filter(m => m.join_type === 'ob').length}명
-        </button>
+      {/* 타입 필터 */}
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+        {[
+          { value: 'all', label: `전체 ${members.length}명` },
+          { value: 'student', label: `재학생 ${members.filter(m => m.join_type === 'student').length}명` },
+          { value: 'ob', label: `OB ${members.filter(m => m.join_type === 'ob').length}명` },
+        ].map(f => (
+          <button
+            key={f.value}
+            onClick={() => setFilterType(f.value as 'all' | 'student' | 'ob')}
+            className="text-xs font-bold px-3 py-1.5 rounded-full flex-shrink-0 transition-all btn-press"
+            style={{
+              background: filterType === f.value ? 'var(--ski-blue)' : 'var(--bg-card)',
+              border: `0.5px solid ${filterType === f.value ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
+              color: filterType === f.value ? '#fff' : 'var(--text-tertiary)',
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {/* 기수 필터 */}
-      <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
         <button
           onClick={() => setSelectedGeneration(null)}
-          className={`text-xs px-3 py-1.5 rounded-full flex-shrink-0 transition-colors ${
-            selectedGeneration === null
-              ? 'text-white'
-              : 'bg-white border text-gray-500 hover:border-gray-300'
-          }`}
-          style={selectedGeneration === null ? { background: 'var(--ski-blue)' } : {}}
+          className="text-xs font-bold px-3 py-1.5 rounded-full flex-shrink-0 transition-all btn-press"
+          style={{
+            background: selectedGeneration === null ? 'var(--ski-blue)' : 'var(--bg-card)',
+            border: `0.5px solid ${selectedGeneration === null ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
+            color: selectedGeneration === null ? '#fff' : 'var(--text-tertiary)',
+          }}
         >
           전체 기수
         </button>
@@ -149,22 +144,25 @@ export default function MembersPage() {
           <button
             key={gen}
             onClick={() => setSelectedGeneration(selectedGeneration === gen ? null : gen)}
-            className={`text-xs px-3 py-1.5 rounded-full flex-shrink-0 transition-colors ${
-              selectedGeneration === gen
-                ? 'text-white'
-                : 'bg-white border text-gray-500 hover:border-gray-300'
-            }`}
-            style={selectedGeneration === gen ? { background: 'var(--ski-blue)' } : {}}
+            className="text-xs font-bold px-3 py-1.5 rounded-full flex-shrink-0 transition-all btn-press"
+            style={{
+              background: selectedGeneration === gen ? 'var(--ski-blue)' : 'var(--bg-card)',
+              border: `0.5px solid ${selectedGeneration === gen ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
+              color: selectedGeneration === gen ? '#fff' : 'var(--text-tertiary)',
+            }}
           >
             {gen}기
           </button>
         ))}
       </div>
 
-      {/* 부원 목록 — 기수별 그룹 */}
+      {/* 부원 목록 */}
       {Object.keys(grouped).length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-sm text-gray-400">검색 결과가 없어요</p>
+        <div className="text-center py-20">
+          <p className="text-4xl font-black mb-2" style={{ color: 'rgba(255,255,255,0.04)' }}>
+            NO RESULT
+          </p>
+          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>검색 결과가 없어요</p>
         </div>
       ) : (
         <div className="flex flex-col gap-6">
@@ -172,41 +170,49 @@ export default function MembersPage() {
             .sort(([a], [b]) => Number(b) - Number(a))
             .map(([gen, genMembers]) => (
               <div key={gen}>
-                <p className="text-xs font-medium text-gray-400 mb-2">{gen}기</p>
+                <p className="text-xs font-black tracking-widest uppercase mb-3"
+                  style={{ color: 'var(--text-hint)' }}>
+                  {gen}기
+                </p>
                 <div className="flex flex-col gap-2">
                   {genMembers.map(m => (
-                    <a
-                      key={m.id}
-                      href={`/members/${m.id}`}
-                      className="flex items-center gap-3 bg-white border rounded-2xl px-4 py-3.5 hover:border-gray-300 transition-colors card-hover"
->
-                      {/* 아바타 */}
+                    <a key={m.id} href={`/members/${m.id}`}
+                      className="flex items-center gap-3 rounded-2xl px-4 py-3.5 card-hover btn-press"
+                      style={{
+                        background: 'var(--bg-card)',
+                        border: '0.5px solid var(--border-primary)',
+                      }}
+                    >
                       {m.avatar_url ? (
-                        <img
-                          src={m.avatar_url}
-                          alt={m.name}
-                          className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-                        />
+                        <img src={m.avatar_url} alt={m.name}
+                          className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
                       ) : (
-                        <div
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0"
-                          style={{ background: 'var(--ski-blue)' }}
-                        >
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-black flex-shrink-0"
+                          style={{ background: 'var(--ski-blue)' }}>
                           {m.name[0]}
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-gray-900">{m.name}</p>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${roleColor[m.role] ?? 'bg-gray-100 text-gray-500'}`}>
+                          <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                            {m.name}
+                          </p>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                            style={{
+                              background: roleColor[m.role] ?? 'rgba(255,255,255,0.06)',
+                              color: roleTextColor[m.role] ?? 'var(--text-tertiary)',
+                            }}>
                             {roleLabel[m.role] ?? m.role}
                           </span>
                         </div>
                         {m.bio && (
-                          <p className="text-xs text-gray-400 mt-0.5 truncate">{m.bio}</p>
+                          <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-hint)' }}>
+                            {m.bio}
+                          </p>
                         )}
                       </div>
-                      <span className="text-xs text-gray-300 flex-shrink-0">›</span>
+                      <span className="text-xs font-bold flex-shrink-0"
+                        style={{ color: 'var(--text-hint)' }}>›</span>
                     </a>
                   ))}
                 </div>

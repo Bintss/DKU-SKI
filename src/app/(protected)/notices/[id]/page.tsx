@@ -39,7 +39,6 @@ export default function NoticeDetailPage() {
       setNotice(noticeData)
       setProfile(profileData)
 
-      // 읽음 처리
       await supabase.from('notice_reads').upsert({
         notice_id: id as string,
         user_id: user.id,
@@ -57,90 +56,89 @@ export default function NoticeDetailPage() {
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-400">불러오는 중...</p>
+    <div className="min-h-screen flex items-center justify-center"
+      style={{ background: 'var(--bg-primary)' }}>
+      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
   )
 
   if (!notice) return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-400">공지사항을 찾을 수 없어요</p>
+      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>공지사항을 찾을 수 없어요</p>
     </div>
   )
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      {/* 운영진 버튼 */}
       {profile?.role === 'admin' && (
         <div className="flex justify-end gap-2 mb-3">
-          <a
-            href={`/notices/${id}/edit`}
-            className="text-xs text-white px-3 py-1.5 rounded-lg"
-            style={{ background: 'var(--ski-blue)' }}
-          >
+          <a href={`/notices/${id}/edit`}
+            className="text-xs font-black text-white px-3 py-1.5 rounded-lg btn-press"
+            style={{ background: 'var(--ski-blue)' }}>
             수정
           </a>
-          <button
-            onClick={handleDelete}
-            className="text-xs bg-red-50 text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-100"
-          >
+          <button onClick={handleDelete}
+            className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
+            style={{ background: 'rgba(242,48,48,0.15)', color: '#FF6B6B' }}>
             삭제
           </button>
         </div>
       )}
 
-      {/* 공지 내용 */}
-      <div className="bg-white border rounded-2xl p-5 mb-4">
+      <div className="rounded-2xl p-5 mb-4"
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
+      >
         <div className="flex items-center gap-2 mb-3">
           {notice.is_pinned && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full"
-              style={{ background: 'var(--ski-blue-50)', color: 'var(--ski-blue)' }}
-            >
-              📌 고정
+            <span className="text-xs font-black px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
+              고정
             </span>
           )}
         </div>
-        <h1 className="text-xl font-semibold text-gray-900 mb-3">{notice.title}</h1>
-        <div className="flex items-center justify-between mb-4 pb-4 border-b">
-          <span className="text-xs text-gray-400">{notice.profiles?.name}</span>
-          <span className="text-xs text-gray-400">
+
+        <h1 className="text-xl font-black mb-3" style={{ color: 'var(--text-primary)' }}>
+          {notice.title}
+        </h1>
+
+        <div className="flex items-center justify-between mb-4 pb-4"
+          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
+          <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+            {notice.profiles?.name}
+          </span>
+          <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
             {new Date(notice.created_at).toLocaleDateString('ko-KR', {
               year: 'numeric', month: 'long', day: 'numeric'
             })}
           </span>
         </div>
 
-        {/* 이미지 */}
         {notice.image_url && (
-          <img
-            src={notice.image_url}
-            alt="공지 이미지"
-            className="w-full rounded-xl mb-4 object-cover"
-          />
+          <img src={notice.image_url} alt="공지 이미지"
+            className="w-full rounded-xl mb-4 object-cover" />
         )}
 
-        {/* 본문 */}
-        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+        <p className="text-sm leading-relaxed whitespace-pre-wrap"
+          style={{ color: 'var(--text-secondary)' }}>
           {notice.content}
         </p>
 
-        {/* 파일 첨부 */}
         {notice.file_url && (
-          <a
-            href={notice.file_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 mt-4 p-3 rounded-xl border hover:border-blue-300 transition-colors"
-            style={{ background: 'var(--gray-50)' }}
+          <a href={notice.file_url} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-3 mt-4 p-3 rounded-xl btn-press"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '0.5px solid var(--border-primary)',
+            }}
           >
-            <span className="text-xl">📎</span>
+            <i className="ti ti-paperclip" style={{ fontSize: 18, color: 'var(--text-tertiary)' }} aria-hidden="true" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-700 truncate">
+              <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-secondary)' }}>
                 {notice.file_name ?? '첨부파일'}
               </p>
-              <p className="text-xs text-gray-400">클릭하여 다운로드</p>
+              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>클릭하여 다운로드</p>
             </div>
-            <span className="text-xs text-gray-400 flex-shrink-0">↓</span>
+            <i className="ti ti-download" style={{ fontSize: 16, color: 'var(--text-hint)' }} aria-hidden="true" />
           </a>
         )}
       </div>
