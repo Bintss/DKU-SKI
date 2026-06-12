@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 
@@ -55,11 +55,11 @@ export default function CampDetailPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [showPanel, setShowPanel] = useState(false)
 
-  // 신청 모드
+  // 신청 모드 (탭 선택 방식)
   const [applyMode, setApplyMode] = useState(false)
-  const [dragStart, setDragStart] = useState<number | null>(null)
-  const [dragEnd, setDragEnd] = useState<number | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
+  const [selectStep, setSelectStep] = useState<'start' | 'end'>('start')
+  const [selectedStart, setSelectedStart] = useState<string | null>(null)
+  const [selectedEnd, setSelectedEnd] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   // 게스트 추가
@@ -69,8 +69,6 @@ export default function CampDetailPage() {
   const [guestJoinDate, setGuestJoinDate] = useState('')
   const [guestLeaveDate, setGuestLeaveDate] = useState('')
   const [guestFee, setGuestFee] = useState('')
-
-  const calGridRef = useRef<HTMLDivElement>(null)
 
   const fetchData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -138,82 +136,62 @@ export default function CampDetailPage() {
     return days
   }
 
-  const getCampDateIndex = (date: string) => {
-    if (!camp) return -1
-    const campDates = getCampDates()
-    return campDates.indexOf(date)
-  }
+  const handleDateTap = (date: string) => {
+    if (!camp) return
+    if (date < camp.start_date || date > camp.end_date) return
 
-  const getCampDates = () => {
-    if (!camp) return []
-    const dates: string[] = []
-    const cur = new Date(camp.start_date)
-    const end = new Date(camp.end_date)
-    while (cur <= end) {
-      dates.push(cur.toISOString().split('T')[0])
-      cur.setDate(cur.getDate() + 1)
+    if (!applyMode) {
+      // 일반 모드 — 날짜 상세 패널
+      if (selectedDate === date) {
+        setSelectedDate(null)
+        setShowPanel(false)
+      } else {
+        setSelectedDate(date)
+        setShowPanel(true)
+        setGuestJoinDate(date)
+        setGuestLeaveDate(date)
+        setGuestMode(false)
+      }
+      return
     }
-    return dates
-  }
 
-  // 드래그 로직
-  const handleCellPointerDown = (date: string) => {
-    if (!applyMode || !camp) return
-    if (date < camp.start_date || date > camp.end_date) return
-    const dayNum = parseInt(date.split('-')[2])
-    setIsDragging(true)
-    setDragStart(dayNum)
-    setDragEnd(dayNum)
-  }
-
-  const handleCellPointerEnter = (date: string) => {
-    if (!isDragging || !applyMode || !camp) return
-    if (date < camp.start_date || date > camp.end_date) return
-    const dayNum = parseInt(date.split('-')[2])
-    setDragEnd(dayNum)
-  }
-
-  const handlePointerUp = () => {
-    setIsDragging(false)
-  }
-
-  const getDragRange = () => {
-    if (dragStart === null) return { lo: null, hi: null }
-    const lo = Math.min(dragStart, dragEnd ?? dragStart)
-    const hi = Math.max(dragStart, dragEnd ?? dragStart)
-    return { lo, hi }
-  }
-
-  const getDragDates = () => {
-    if (!camp || dragStart === null) return { joinDate: '', leaveDate: '' }
-    const { lo, hi } = getDragRange()
-    const year = new Date(camp.start_date).getFullYear()
-    const month = new Date(camp.start_date).getMonth() + 1
-    const joinDate = `${year}-${String(month).padStart(2, '0')}-${String(lo).padStart(2, '0')}`
-    const leaveDate = `${year}-${String(month).padStart(2, '0')}-${String(hi).padStart(2, '0')}`
-    return { joinDate, leaveDate }
+    // 신청 모드 — 탭 선택
+    if (selectStep === 'start') {
+      setSelectedStart(date)
+      setSelectedEnd(null)
+      setSelectStep('end')
+    } else {
+      if (date < selectedStart!) {
+        // 종료일이 시작일보다 앞이면 시작일로 재설정
+        setSelectedStart(date)
+        setSelectedEnd(null)
+        setSelectStep('end')
+      } else {
+        setSelectedEnd(date)
+      }
+    }
   }
 
   const handleConfirmApply = async () => {
-    if (!camp || !profile || dragStart === null) return
+    if (!camp || !profile || !selectedStart || !selectedEnd) return
     setSubmitting(true)
 
-    const { joinDate, leaveDate } = getDragDates()
     const label = `${myParticipations.length + 1}차`
 
     await supabase.from('camp_participants').insert({
       camp_id: camp.id,
       user_id: profile.id,
       participant_type: profile.role === 'ob' ? 'ob' : 'member',
-      join_date: joinDate,
-      leave_date: leaveDate,
+      join_date: selectedStart,
+      leave_date: selectedEnd,
       label,
       status: 'confirmed',
     })
 
     setApplyMode(false)
-    setDragStart(null)
-    setDragEnd(null)
+    setSelectedStart(null)
+    setSelectedEnd(null)
+    setSelectStep('start')
     setSubmitting(false)
     fetchData()
   }
@@ -270,19 +248,11 @@ export default function CampDetailPage() {
 
   const calendarMonths = getCalendarMonths()
   const canApply = camp.is_open && (!camp.deadline || new Date(camp.deadline) > new Date())
-  const campDates = getCampDates()
   const selectedMembers = selectedDate ? getMembersByDate(selectedDate) : []
   const selectedGuests = selectedDate ? getGuestsByDate(selectedDate) : []
-  const { lo: dragLo, hi: dragHi } = getDragRange()
-  const { joinDate: dragJoinDate, leaveDate: dragLeaveDate } = getDragDates()
-  const dragNights = dragJoinDate && dragLeaveDate ? getNights(dragJoinDate, dragLeaveDate) : 0
 
   return (
-    <main
-      className="max-w-lg mx-auto px-4 pb-40"
-      onPointerUp={handlePointerUp}
-      style={{ touchAction: applyMode ? 'none' : 'auto' }}
-    >
+    <main className="max-w-lg mx-auto px-4 pb-40">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">
         <a href="/camp" className="text-xs font-semibold"
@@ -352,26 +322,22 @@ export default function CampDetailPage() {
             {/* 월 네비게이션 */}
             <div className="flex items-center justify-between mb-4">
               <button onClick={() => hasPrev && setCurrentMonth(calendarMonths[currentIdx - 1])}
-                className="w-9 h-9 rounded-full flex items-center justify-center text-lg transition-colors"
+                className="w-9 h-9 rounded-full flex items-center justify-center text-lg"
                 style={{
                   color: hasPrev ? 'var(--text-secondary)' : 'var(--text-hint)',
                   background: hasPrev ? 'var(--bg-card)' : 'transparent',
                   cursor: hasPrev ? 'pointer' : 'default',
-                }}>
-                ‹
-              </button>
+                }}>‹</button>
               <p className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>
                 {monthName}
               </p>
               <button onClick={() => hasNext && setCurrentMonth(calendarMonths[currentIdx + 1])}
-                className="w-9 h-9 rounded-full flex items-center justify-center text-lg transition-colors"
+                className="w-9 h-9 rounded-full flex items-center justify-center text-lg"
                 style={{
                   color: hasNext ? 'var(--text-secondary)' : 'var(--text-hint)',
                   background: hasNext ? 'var(--bg-card)' : 'transparent',
                   cursor: hasNext ? 'pointer' : 'default',
-                }}>
-                ›
-              </button>
+                }}>›</button>
             </div>
 
             {/* 요일 */}
@@ -381,18 +347,12 @@ export default function CampDetailPage() {
                   style={{
                     color: i === 0 ? 'rgba(255,80,80,0.4)' :
                       i === 6 ? 'rgba(100,150,255,0.4)' : 'var(--text-hint)'
-                  }}>
-                  {d}
-                </div>
+                  }}>{d}</div>
               ))}
             </div>
 
             {/* 날짜 그리드 */}
-            <div
-              ref={calGridRef}
-              className="grid grid-cols-7 gap-1"
-              style={{ userSelect: 'none' }}
-            >
+            <div className="grid grid-cols-7 gap-1">
               {days.map((date, idx) => {
                 if (!date) return <div key={`empty-${idx}`} />
 
@@ -404,32 +364,42 @@ export default function CampDetailPage() {
                 const dayNum = parseInt(date.split('-')[2])
                 const dayOfWeek = new Date(date + 'T00:00:00').getDay()
 
-                // 드래그 선택 범위
-                const isInDragRange = applyMode && dragLo !== null && dragHi !== null &&
-                  dayNum >= dragLo && dayNum <= dragHi && isCampDate
-                const isDragStart = applyMode && dragLo !== null && dayNum === dragLo && isCampDate
-                const isDragEnd = applyMode && dragHi !== null && dayNum === dragHi && isCampDate && dragLo !== dragHi
-
-                // 선택된 날짜
+                // 탭 선택 범위 표시
+                const isStart = applyMode && selectedStart === date && isCampDate
+                const isEnd = applyMode && selectedEnd === date && isCampDate
+                const isInApplyRange = applyMode && selectedStart && selectedEnd &&
+                  date >= selectedStart && date <= selectedEnd && isCampDate
                 const isSelected = selectedDate === date && !applyMode
+
+                // 오늘 하이라이트 (신청 단계 표시)
+                const isSelectingStep = applyMode && (
+                  (selectStep === 'start' && !selectedStart) ||
+                  (selectStep === 'end' && selectedStart && !selectedEnd)
+                )
 
                 let bg = 'transparent'
                 let borderRadius = '8px'
                 let scale = 1
                 let shadow = 'none'
 
-                if (applyMode && isInDragRange) {
-                  bg = 'rgba(27,63,171,0.25)'
-                  borderRadius = '0'
-                  if (isDragStart) { borderRadius = '8px 0 0 8px'; bg = '#1B3FAB'; scale = 1.05; shadow = '0 4px 12px rgba(27,63,171,0.5)' }
-                  if (isDragEnd) { borderRadius = '0 8px 8px 0'; bg = '#1B3FAB'; scale = 1.05; shadow = '0 4px 12px rgba(27,63,171,0.5)' }
-                  if (isDragStart && dragLo === dragHi) { borderRadius = '8px'; bg = '#1B3FAB'; scale = 1.05 }
-                } else if (!applyMode && isMyDate && isCampDate) {
-                  bg = 'rgba(27,63,171,0.2)'
+                if (applyMode) {
+                  if (isStart && isEnd) {
+                    bg = '#1B3FAB'; borderRadius = '8px'; scale = 1.08
+                    shadow = '0 4px 12px rgba(27,63,171,0.5)'
+                  } else if (isStart) {
+                    bg = '#1B3FAB'; borderRadius = selectedEnd ? '8px 0 0 8px' : '8px'
+                    scale = 1.05; shadow = '0 4px 12px rgba(27,63,171,0.5)'
+                  } else if (isEnd) {
+                    bg = '#1B3FAB'; borderRadius = '0 8px 8px 0'
+                    scale = 1.05; shadow = '0 4px 12px rgba(27,63,171,0.5)'
+                  } else if (isInApplyRange) {
+                    bg = 'rgba(27,63,171,0.2)'; borderRadius = '0'
+                  }
                 } else if (isSelected) {
-                  bg = '#1B3FAB'
-                  scale = 1.08
+                  bg = '#1B3FAB'; scale = 1.08
                   shadow = '0 4px 12px rgba(27,63,171,0.5)'
+                } else if (isMyDate && isCampDate) {
+                  bg = 'rgba(27,63,171,0.2)'
                 }
 
                 return (
@@ -441,28 +411,18 @@ export default function CampDetailPage() {
                       background: bg,
                       transform: `scale(${scale})`,
                       boxShadow: shadow,
-                      transition: 'background 0.1s, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s',
+                      transition: 'background 0.15s, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
                       opacity: isCampDate ? 1 : 0.15,
                       zIndex: scale > 1 ? 1 : 0,
+                      // 신청 모드에서 선택 가능한 날짜 강조
+                      outline: applyMode && isCampDate && isSelectingStep && !isStart && !isEnd
+                        ? '1px dashed rgba(127,164,255,0.3)' : 'none',
                     }}
-                    onPointerDown={() => {
-                      if (applyMode && isCampDate) {
-                        handleCellPointerDown(date)
-                      } else if (!applyMode && isCampDate) {
-                        setSelectedDate(isSelected ? null : date)
-                        setShowPanel(!isSelected)
-                        if (camp) {
-                          setGuestJoinDate(date)
-                          setGuestLeaveDate(date)
-                        }
-                        setGuestMode(false)
-                      }
-                    }}
-                    onPointerEnter={() => handleCellPointerEnter(date)}
+                    onClick={() => isCampDate && handleDateTap(date)}
                   >
                     <span className="text-xs font-black"
                       style={{
-                        color: (isSelected || (applyMode && isInDragRange && (isDragStart || isDragEnd)))
+                        color: (isSelected || isStart || isEnd)
                           ? '#fff'
                           : dayOfWeek === 0 ? 'rgba(255,80,80,0.7)'
                           : dayOfWeek === 6 ? 'rgba(100,150,255,0.7)'
@@ -471,14 +431,14 @@ export default function CampDetailPage() {
                       {dayNum}
                     </span>
 
-                    {/* 참여자 도트 */}
+                    {/* 도트 */}
                     {isCampDate && total > 0 && (
                       <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center"
                         style={{ maxWidth: 28 }}>
                         {members.slice(0, 3).map(p => (
                           <div key={p.id} className="w-1 h-1 rounded-full"
                             style={{
-                              background: (isSelected || (applyMode && isInDragRange))
+                              background: (isSelected || isStart || isEnd || isInApplyRange)
                                 ? 'rgba(255,255,255,0.6)'
                                 : p.user_id === profile?.id ? 'var(--accent-green)'
                                 : p.participant_type === 'ob' ? 'var(--accent-purple)'
@@ -488,7 +448,7 @@ export default function CampDetailPage() {
                         {dayGuests.slice(0, 2).map(g => (
                           <div key={g.id} className="w-1 h-1 rounded-full"
                             style={{
-                              background: (isSelected || (applyMode && isInDragRange))
+                              background: (isSelected || isStart || isEnd)
                                 ? 'rgba(255,255,255,0.6)' : 'var(--accent-orange)'
                             }} />
                         ))}
@@ -498,7 +458,7 @@ export default function CampDetailPage() {
                     {isCampDate && total > 0 && (
                       <span className="text-[9px] mt-0.5 font-black"
                         style={{
-                          color: (isSelected || (applyMode && isInDragRange && (isDragStart || isDragEnd)))
+                          color: (isSelected || isStart || isEnd)
                             ? 'rgba(255,255,255,0.7)' : 'var(--text-hint)'
                         }}>
                         {total}
@@ -541,31 +501,20 @@ export default function CampDetailPage() {
       {/* 날짜 상세 패널 — 슬라이드업 */}
       {showPanel && selectedDate && !applyMode && (
         <>
-          <div
-            className="fixed inset-0 z-40"
-            style={{ background: 'rgba(0,0,0,0.6)' }}
-            onClick={() => setShowPanel(false)}
-          />
-          <div
-            className="fixed bottom-0 left-0 right-0 z-50 max-w-lg mx-auto"
+          <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.6)' }}
+            onClick={() => setShowPanel(false)} />
+          <div className="fixed bottom-0 left-0 right-0 z-50 max-w-lg mx-auto"
             style={{
               background: 'var(--bg-secondary)',
               borderRadius: '20px 20px 0 0',
               borderTop: '0.5px solid var(--border-secondary)',
               animation: 'slideUp 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
-            }}
-          >
-            <style>{`
-              @keyframes slideUp {
-                from { transform: translateY(100%); }
-                to { transform: translateY(0); }
-              }
-            `}</style>
-
+            }}>
+            <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
             <div className="w-9 h-1 rounded-full mx-auto mt-3 mb-4"
               style={{ background: 'rgba(255,255,255,0.15)' }} />
 
-            <div className="px-5 pb-safe">
+            <div className="px-5 pb-8">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>
                   {new Date(selectedDate + 'T00:00:00').toLocaleDateString('ko-KR', {
@@ -577,9 +526,7 @@ export default function CampDetailPage() {
                     총 {selectedMembers.length + selectedGuests.length}명
                   </span>
                   <button onClick={() => setShowPanel(false)}
-                    className="text-lg leading-none" style={{ color: 'var(--text-hint)' }}>
-                    ✕
-                  </button>
+                    className="text-lg leading-none" style={{ color: 'var(--text-hint)' }}>✕</button>
                 </div>
               </div>
 
@@ -663,9 +610,7 @@ export default function CampDetailPage() {
                               {g.fee_paid ? '수납완료' : '미수납'}
                             </button>
                             <button onClick={() => handleDeleteGuest(g.id)}
-                              className="text-sm" style={{ color: 'rgba(255,107,107,0.4)' }}>
-                              ✕
-                            </button>
+                              className="text-sm" style={{ color: 'rgba(255,107,107,0.4)' }}>✕</button>
                           </div>
                         )}
                       </div>
@@ -755,7 +700,6 @@ export default function CampDetailPage() {
                   )}
                 </div>
               )}
-              <div className="pb-6" />
             </div>
           </div>
         </>
@@ -769,8 +713,7 @@ export default function CampDetailPage() {
             backdropFilter: 'blur(12px)',
             borderTop: '0.5px solid var(--border-primary)',
             padding: '12px 20px 28px',
-          }}
-        >
+          }}>
           {!applyMode ? (
             /* 일반 모드 */
             <div>
@@ -795,9 +738,7 @@ export default function CampDetailPage() {
                             </span>
                           </span>
                           <button onClick={() => handleDeleteParticipation(p.id)}
-                            className="text-xs" style={{ color: 'rgba(255,107,107,0.5)' }}>
-                            ✕
-                          </button>
+                            className="text-xs" style={{ color: 'rgba(255,107,107,0.5)' }}>✕</button>
                         </div>
                       )
                     })}
@@ -806,8 +747,9 @@ export default function CampDetailPage() {
               )}
               <button onClick={() => {
                 setApplyMode(true)
-                setDragStart(null)
-                setDragEnd(null)
+                setSelectedStart(null)
+                setSelectedEnd(null)
+                setSelectStep('start')
                 setShowPanel(false)
               }}
                 className="w-full text-white rounded-xl py-3 text-sm font-black btn-press"
@@ -816,49 +758,92 @@ export default function CampDetailPage() {
               </button>
             </div>
           ) : (
-            /* 드래그 선택 모드 */
+            /* 탭 선택 모드 */
             <div>
               <p className="text-xs font-black tracking-widest uppercase mb-3"
                 style={{ color: 'var(--text-hint)' }}>
-                달력에서 드래그해서 기간을 선택하세요
+                {selectStep === 'start' ? '📍 달력에서 도착일을 탭하세요' : '📍 달력에서 출발일을 탭하세요'}
               </p>
-              <div className="flex gap-2">
-                <div className="flex-1 rounded-xl px-4 py-2.5"
+
+              {/* 날짜 선택 표시 */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 rounded-xl px-3 py-2.5 text-center"
                   style={{
-                    background: dragStart !== null ? 'rgba(27,63,171,0.2)' : 'rgba(255,255,255,0.04)',
-                    border: `0.5px solid ${dragStart !== null ? 'rgba(27,63,171,0.4)' : 'var(--border-primary)'}`,
+                    background: selectStep === 'start' && !selectedStart
+                      ? 'rgba(27,63,171,0.25)' : selectedStart
+                      ? 'rgba(27,63,171,0.2)' : 'rgba(255,255,255,0.04)',
+                    border: `0.5px solid ${selectStep === 'start'
+                      ? 'rgba(27,63,171,0.6)' : 'var(--border-primary)'}`,
                   }}>
-                  {dragStart !== null ? (
-                    <>
-                      <p className="text-sm font-black" style={{ color: 'var(--accent-blue)' }}>
-                        {dragJoinDate.slice(5)} — {dragLeaveDate.slice(5)}
-                      </p>
-                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                        {dragNights > 0 ? `${dragNights}박 ${dragNights + 1}일` : '당일'}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
-                      시작일을 터치하세요
-                    </p>
-                  )}
+                  <p className="text-xs font-black mb-0.5"
+                    style={{ color: selectStep === 'start' ? 'var(--accent-blue)' : 'var(--text-hint)' }}>
+                    {selectStep === 'start' && !selectedStart ? '탭하여 선택' : '도착일'}
+                  </p>
+                  <p className="text-sm font-black"
+                    style={{ color: selectedStart ? 'var(--text-primary)' : 'var(--text-hint)' }}>
+                    {selectedStart ? selectedStart.slice(5) : '—'}
+                  </p>
                 </div>
+
+                <span style={{ color: 'var(--text-hint)' }}>→</span>
+
+                <div className="flex-1 rounded-xl px-3 py-2.5 text-center"
+                  style={{
+                    background: selectStep === 'end' && !selectedEnd
+                      ? 'rgba(27,63,171,0.25)' : selectedEnd
+                      ? 'rgba(27,63,171,0.2)' : 'rgba(255,255,255,0.04)',
+                    border: `0.5px solid ${selectStep === 'end'
+                      ? 'rgba(27,63,171,0.6)' : 'var(--border-primary)'}`,
+                  }}>
+                  <p className="text-xs font-black mb-0.5"
+                    style={{ color: selectStep === 'end' ? 'var(--accent-blue)' : 'var(--text-hint)' }}>
+                    {selectStep === 'end' && !selectedEnd ? '탭하여 선택' : '출발일'}
+                  </p>
+                  <p className="text-sm font-black"
+                    style={{ color: selectedEnd ? 'var(--text-primary)' : 'var(--text-hint)' }}>
+                    {selectedEnd ? selectedEnd.slice(5) : '—'}
+                  </p>
+                </div>
+              </div>
+
+              {/* 박수 표시 */}
+              {selectedStart && selectedEnd && (
+                <p className="text-xs text-center mb-3 font-black"
+                  style={{ color: 'var(--text-hint)' }}>
+                  {getNights(selectedStart, selectedEnd) > 0
+                    ? `${getNights(selectedStart, selectedEnd)}박 ${getNights(selectedStart, selectedEnd) + 1}일`
+                    : '당일'}
+                </p>
+              )}
+
+              <div className="flex gap-2">
                 <button onClick={handleConfirmApply}
-                  disabled={submitting || dragStart === null}
-                  className="text-white rounded-xl px-5 text-sm font-black disabled:opacity-40 btn-press"
+                  disabled={submitting || !selectedStart || !selectedEnd}
+                  className="flex-1 text-white rounded-xl py-3 text-sm font-black disabled:opacity-40 btn-press"
                   style={{ background: 'var(--ski-blue)' }}>
                   {submitting ? '...' : '확정'}
                 </button>
                 <button onClick={() => {
                   setApplyMode(false)
-                  setDragStart(null)
-                  setDragEnd(null)
+                  setSelectedStart(null)
+                  setSelectedEnd(null)
+                  setSelectStep('start')
                 }}
-                  className="rounded-xl px-4 text-sm font-black btn-press"
+                  className="rounded-xl px-4 py-3 text-sm font-black btn-press"
                   style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-tertiary)' }}>
                   취소
                 </button>
               </div>
+
+              {/* 다시 선택 */}
+              {selectedStart && (
+                <button
+                  onClick={() => { setSelectedStart(null); setSelectedEnd(null); setSelectStep('start') }}
+                  className="w-full text-xs text-center mt-2 font-black"
+                  style={{ color: 'var(--text-hint)' }}>
+                  다시 선택
+                </button>
+              )}
             </div>
           )}
         </div>

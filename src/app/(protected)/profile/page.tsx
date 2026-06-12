@@ -13,6 +13,9 @@ type Profile = {
   student_id: string | null
   bio: string | null
   avatar_url: string | null
+  bank_name: string | null
+  account_number: string | null
+  account_holder: string | null
 }
 
 export default function ProfilePage() {
@@ -28,7 +31,9 @@ export default function ProfilePage() {
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
-
+  const [bankName, setBankName] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [accountHolder, setAccountHolder] = useState('')
   useEffect(() => {
     const fetchProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -36,7 +41,9 @@ export default function ProfilePage() {
 
       const { data } = await supabase
         .from('profiles').select('*').eq('id', user.id).single()
-
+      setBankName(data?.bank_name ?? '')
+setAccountNumber(data?.account_number ?? '')
+setAccountHolder(data?.account_holder ?? '')
       setProfile(data)
       setName(data?.name ?? '')
       setBio(data?.bio ?? '')
@@ -71,12 +78,22 @@ export default function ProfilePage() {
     setSubmitting(true)
 
     await supabase.from('profiles').update({
-      name, bio, generation: parseInt(generation), join_type: joinType,
-    }).eq('id', profile.id)
+  name, bio,
+  generation: parseInt(generation),
+  join_type: joinType,
+  bank_name: bankName || null,
+  account_number: accountNumber || null,
+  account_holder: accountHolder || null,
+}).eq('id', profile.id)
 
-    setProfile(prev => prev ? {
-      ...prev, name, bio, generation: parseInt(generation), join_type: joinType,
-    } : prev)
+setProfile(prev => prev ? {
+  ...prev, name, bio,
+  generation: parseInt(generation),
+  join_type: joinType,
+  bank_name: bankName || null,
+  account_number: accountNumber || null,
+  account_holder: accountHolder || null,
+} : prev)
     setEditMode(false)
     setSubmitting(false)
   }
@@ -131,6 +148,9 @@ export default function ProfilePage() {
               setBio(profile.bio ?? '')
               setGeneration(String(profile.generation))
               setJoinType(profile.join_type)
+              setBankName(profile.bank_name ?? '')
+setAccountNumber(profile.account_number ?? '')
+setAccountHolder(profile.account_holder ?? '')
             }}
               className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
               style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-tertiary)' }}>
@@ -265,6 +285,59 @@ export default function ProfilePage() {
           </span>
         </div>
       </div>
+
+      {/* 계좌 정보 */}
+<div className="rounded-2xl p-5 mb-4"
+  style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
+>
+  <h2 className="text-xs font-black tracking-widest uppercase mb-3"
+    style={{ color: 'var(--text-hint)' }}>계좌 정보</h2>
+  <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>
+    정산 요청 시 송금받을 계좌를 등록해주세요
+  </p>
+  {editMode ? (
+    <div className="flex flex-col gap-2">
+      <input type="text" placeholder="은행명 (예: 토스뱅크, 카카오뱅크)"
+        value={bankName} onChange={e => setBankName(e.target.value)}
+        className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
+      <input type="text" placeholder="계좌번호"
+        value={accountNumber} onChange={e => setAccountNumber(e.target.value)}
+        className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
+      <input type="text" placeholder="예금주"
+        value={accountHolder} onChange={e => setAccountHolder(e.target.value)}
+        className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
+    </div>
+  ) : (
+    profile.bank_name && profile.account_number ? (
+      <div className="flex flex-col gap-1.5">
+        <div className="flex justify-between py-2"
+          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
+          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>은행</span>
+          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {profile.bank_name}
+          </span>
+        </div>
+        <div className="flex justify-between py-2"
+          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
+          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>계좌번호</span>
+          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {profile.account_number}
+          </span>
+        </div>
+        <div className="flex justify-between py-2">
+          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>예금주</span>
+          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {profile.account_holder}
+          </span>
+        </div>
+      </div>
+    ) : (
+      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
+        등록된 계좌가 없어요
+      </p>
+    )
+  )}
+</div>
 
       {/* 자기소개 */}
       <div className="rounded-2xl p-5 mb-4"

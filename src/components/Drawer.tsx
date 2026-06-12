@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: '/notices', label: '공지사항' },
   { href: '/camp', label: '합숙' },
   { href: '/events', label: '행사' },
+  { href: '/settlement', label: '정산하기' },
   { href: '/members', label: '동문 디렉토리' },
   { href: '/community', label: '커뮤니티' },
 ]
