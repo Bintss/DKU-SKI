@@ -67,7 +67,6 @@ export default function NewSettlementPage() {
     ? total % selectedIds.length
     : 0
 
-  // 개별 금액 합계
   const customTotal = Object.values(customAmounts)
     .filter(v => v !== '')
     .reduce((sum, v) => sum + (parseInt(v) || 0), 0)
@@ -78,11 +77,9 @@ export default function NewSettlementPage() {
     if (selectedIds.length === 0) { setError('정산 대상을 선택해주세요'); return }
     if (!total) { setError('총 금액을 입력해주세요'); return }
 
-    if (!splitEqual) {
-      if (customTotal !== total) {
-        setError(`개별 금액 합계(${customTotal.toLocaleString()}원)가 총액(${total.toLocaleString()}원)과 달라요`)
-        return
-      }
+    if (!splitEqual && customTotal !== total) {
+      setError(`개별 금액 합계(${customTotal.toLocaleString()}원)가 총액(${total.toLocaleString()}원)과 달라요`)
+      return
     }
 
     setSubmitting(true)
@@ -111,23 +108,18 @@ export default function NewSettlementPage() {
       } else {
         amount = parseInt(customAmounts[uid] || '0')
       }
-      return { settlement_id: settlement.id, user_id: uid, amount, is_paid: false }
+      return {
+        settlement_id: settlement.id,
+        user_id: uid,
+        amount,
+        is_paid: false,
+        status: 'unpaid',
+      }
     })
 
     await supabase.from('settlement_items').insert(items)
-    await fetch('/api/push/send', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${process.env.NEXT_PUBLIC_INTERNAL_API_SECRET}`,
-  },
-  body: JSON.stringify({
-    userIds: selectedIds.filter(id => id !== profile.id), // 본인 제외
-    title: '새 정산 요청',
-    body: `${profile.name}님이 "${title}" 정산을 요청했어요 · ${amountPerPerson.toLocaleString()}원`,
-    url: `/settlement/${settlement.id}`,
-  }),
-})
+
+    // Webhook이 자동으로 푸시 알림 발송
     router.push('/settlement')
   }
 
@@ -146,7 +138,6 @@ export default function NewSettlementPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {/* 정산명 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>정산명</label>
@@ -155,7 +146,6 @@ export default function NewSettlementPage() {
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
         </div>
 
-        {/* 설명 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>설명 (선택)</label>
@@ -164,7 +154,6 @@ export default function NewSettlementPage() {
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
         </div>
 
-        {/* 총 금액 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>총 금액 (원)</label>
@@ -173,7 +162,6 @@ export default function NewSettlementPage() {
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
         </div>
 
-        {/* 마감일 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>마감일 (선택)</label>
@@ -181,7 +169,6 @@ export default function NewSettlementPage() {
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
         </div>
 
-        {/* 분할 방식 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-2 block"
             style={{ color: 'var(--text-hint)' }}>분할 방식</label>
@@ -204,7 +191,6 @@ export default function NewSettlementPage() {
           </div>
         </div>
 
-        {/* 대상 선택 */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-black tracking-widest uppercase"
@@ -241,7 +227,7 @@ export default function NewSettlementPage() {
             </div>
           )}
 
-          {/* 개별 금액 합계 표시 */}
+          {/* 개별 금액 합계 */}
           {!splitEqual && selectedIds.length > 0 && (
             <div className="rounded-xl px-4 py-3 mb-3 flex items-center justify-between"
               style={{
@@ -269,7 +255,6 @@ export default function NewSettlementPage() {
             </div>
           )}
 
-          {/* 부원 목록 */}
           <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
             {members.map(m => {
               const isSelected = selectedIds.includes(m.id)
@@ -282,17 +267,13 @@ export default function NewSettlementPage() {
                     border: `0.5px solid ${isSelected ? 'rgba(27,63,171,0.4)' : 'var(--border-primary)'}`,
                   }}
                   onClick={() => toggleMember(m.id)}>
-                  {/* 체크박스 */}
                   <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
                     style={{
                       background: isSelected ? 'var(--ski-blue)' : 'rgba(255,255,255,0.06)',
                       border: `0.5px solid ${isSelected ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
                     }}>
-                    {isSelected && (
-                      <span className="text-white text-xs font-black">✓</span>
-                    )}
+                    {isSelected && <span className="text-white text-xs font-black">✓</span>}
                   </div>
-
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
                       {m.name}
@@ -305,8 +286,6 @@ export default function NewSettlementPage() {
                       {m.generation}기
                     </span>
                   </div>
-
-                  {/* 개별 금액 입력 */}
                   {!splitEqual && isSelected && (
                     <input type="number" placeholder="금액"
                       value={customAmounts[m.id] ?? ''}
@@ -317,8 +296,6 @@ export default function NewSettlementPage() {
                       className="w-24 rounded-lg px-2 py-1.5 text-xs text-right"
                       style={inputStyle} />
                   )}
-
-                  {/* 1/N 금액 표시 */}
                   {splitEqual && isSelected && total > 0 && (
                     <span className="text-xs font-black flex-shrink-0"
                       style={{ color: 'var(--accent-blue)' }}>

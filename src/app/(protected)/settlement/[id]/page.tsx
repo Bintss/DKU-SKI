@@ -46,10 +46,10 @@ export default function SettlementDetailPage() {
   const [settlement, setSettlement] = useState<Settlement | null>(null)
   const [items, setItems] = useState<SettlementItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   const fetchData = async () => {
     if (!profile) return
-
     const [{ data: settlementData }, { data: itemData }] = await Promise.all([
       supabase.from('settlements')
         .select('*, profiles(name, bank_name, account_number, account_holder)')
@@ -59,7 +59,6 @@ export default function SettlementDetailPage() {
         .eq('settlement_id', id)
         .order('status'),
     ])
-
     setSettlement(settlementData)
     setItems(itemData ?? [])
     setLoading(false)
@@ -69,61 +68,41 @@ export default function SettlementDetailPage() {
     if (profile) fetchData()
   }, [profile, id])
 
-  // 부원: 송금했어요 (unpaid → pending)
   const handleMarkPending = async (itemId: string) => {
-  await supabase.from('settlement_items').update({
-    status: 'pending',
-  }).eq('id', itemId)
-
-  // 요청자에게 알림
-  await fetch('/api/push/send', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.NEXT_PUBLIC_INTERNAL_API_SECRET}`,
-    },
-    body: JSON.stringify({
-      userIds: [settlement!.created_by],
-      title: '송금 확인 요청',
-      body: `${profile?.name}님이 "${settlement!.title}" 정산 송금을 완료했어요. 확인해주세요!`,
-      url: `/settlement/${id}`,
-    }),
-  })
-
-  fetchData()
-}
-
-  // 요청자/운영진: 납부 확인 (pending/unpaid → paid 또는 paid → unpaid)
-  const handleMarkPaid = async (itemId: string, currentStatus: string) => {
-  const newStatus = currentStatus === 'paid' ? 'unpaid' : 'paid'
-  await supabase.from('settlement_items').update({
-    status: newStatus,
-    is_paid: newStatus === 'paid',
-    paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
-  }).eq('id', itemId)
-
-  // 납부 완료 시 해당 부원에게 알림
-  if (newStatus === 'paid') {
-    const item = items.find(i => i.id === itemId)
-    if (item) {
-      await fetch('/api/push/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_INTERNAL_API_SECRET}`,
-        },
-        body: JSON.stringify({
-          userIds: [item.user_id],
-          title: '정산 납부 확인 완료',
-          body: `"${settlement!.title}" 정산 ${item.amount.toLocaleString()}원 납부가 확인됐어요!`,
-          url: `/settlement/${id}`,
-        }),
-      })
-    }
+    setActionLoading(itemId)
+    const { error } = await supabase.from('settlement_items')
+      .update({ status: 'pending' })
+      .eq('id', itemId)
+    if (error) console.error('markPending error:', error)
+    setActionLoading(null)
+    fetchData()
   }
 
-  fetchData()
-}
+  const handleCancelPending = async (itemId: string) => {
+    setActionLoading(itemId)
+    const { error } = await supabase.from('settlement_items')
+      .update({ status: 'unpaid' })
+      .eq('id', itemId)
+    if (error) console.error('cancelPending error:', error)
+    setActionLoading(null)
+    fetchData()
+  }
+
+  const handleMarkPaid = async (itemId: string, currentStatus: string) => {
+    setActionLoading(itemId)
+    const newStatus = currentStatus === 'paid' ? 'unpaid' : 'paid'
+    const { error } = await supabase.from('settlement_items')
+      .update({
+        status: newStatus,
+        is_paid: newStatus === 'paid',
+        paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
+      })
+      .eq('id', itemId)
+    if (error) console.error('markPaid error:', error)
+    setActionLoading(null)
+    fetchData()
+  }
+
   const handleDelete = async () => {
     if (!confirm('정산을 삭제할까요?')) return
     await supabase.from('settlements').delete().eq('id', id as string)
@@ -151,10 +130,13 @@ export default function SettlementDetailPage() {
     }, 1500)
   }
 
-  const copyAccount = (accountNumber: string) => {
-    navigator.clipboard.writeText(accountNumber)
-      .then(() => alert('계좌번호가 복사됐어요'))
-      .catch(() => alert(accountNumber))
+  const copyAccount = async (accountNumber: string) => {
+    try {
+      await navigator.clipboard.writeText(accountNumber)
+      alert('계좌번호가 복사됐어요')
+    } catch {
+      alert(accountNumber)
+    }
   }
 
   if (profileLoading || loading) return (
@@ -173,7 +155,6 @@ export default function SettlementDetailPage() {
   const isCreator = settlement.created_by === profile?.id
   const isAdmin = profile?.role === 'admin'
   const canConfirm = isCreator || isAdmin
-
   const paidCount = items.filter(i => i.status === 'paid').length
   const pendingCount = items.filter(i => i.status === 'pending').length
   const totalCount = items.length
@@ -186,7 +167,7 @@ export default function SettlementDetailPage() {
     return '미납'
   }
 
-  const statusColor = (status: string) => {
+  const statusStyle = (status: string) => {
     if (status === 'paid') return { bg: 'rgba(46,204,113,0.2)', color: 'var(--accent-green)' }
     if (status === 'pending') return { bg: 'rgba(255,214,0,0.15)', color: '#FFD700' }
     return { bg: 'rgba(255,255,255,0.06)', color: 'var(--text-hint)' }
@@ -199,7 +180,7 @@ export default function SettlementDetailPage() {
           style={{ color: 'var(--text-tertiary)' }}>← 정산 목록</a>
         {canConfirm && (
           <button onClick={handleDelete}
-            className="text-xs font-black btn-press" style={{ color: '#FF6B6B' }}>
+            className="text-xs font-black" style={{ color: '#FF6B6B' }}>
             삭제
           </button>
         )}
@@ -213,7 +194,6 @@ export default function SettlementDetailPage() {
         }}>
         <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
           style={{ background: 'white', transform: 'translate(30%,-30%)' }} />
-
         <p className="text-xs font-black tracking-widest uppercase mb-1"
           style={{ color: 'rgba(255,255,255,0.5)' }}>
           {settlement.profiles?.name} 요청
@@ -226,7 +206,6 @@ export default function SettlementDetailPage() {
             {settlement.description}
           </p>
         )}
-
         <div className="flex items-end justify-between mt-3">
           <div>
             <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>총 금액</p>
@@ -244,21 +223,20 @@ export default function SettlementDetailPage() {
             </p>
           </div>
         </div>
-
-        {/* 진행률 바 */}
         <div className="mt-3 h-1.5 rounded-full overflow-hidden"
           style={{ background: 'rgba(255,255,255,0.15)' }}>
-          {/* 확인 대기 */}
           <div className="h-full flex">
-            <div className="h-full rounded-l-full transition-all duration-500"
+            <div className="h-full transition-all duration-500"
               style={{
                 width: `${progressPct}%`,
                 background: 'rgba(255,255,255,0.7)',
+                borderRadius: pendingCount > 0 ? '9999px 0 0 9999px' : '9999px',
               }} />
             <div className="h-full transition-all duration-500"
               style={{
                 width: `${totalCount > 0 ? (pendingCount / totalCount) * 100 : 0}%`,
-                background: 'rgba(255,214,0,0.5)',
+                background: 'rgba(255,214,0,0.6)',
+                borderRadius: '0 9999px 9999px 0',
               }} />
           </div>
         </div>
@@ -293,12 +271,12 @@ export default function SettlementDetailPage() {
               내 정산
             </p>
             <span className="text-xs font-black px-2.5 py-1 rounded-full"
-              style={statusColor(myItem.status)}>
+              style={statusStyle(myItem.status)}>
               {statusLabel(myItem.status)}
             </span>
           </div>
 
-          <p className="text-3xl font-black mb-1"
+          <p className="text-3xl font-black mb-3"
             style={{
               color: myItem.status === 'paid' ? 'var(--accent-green)'
                 : myItem.status === 'pending' ? '#FFD700'
@@ -313,45 +291,47 @@ export default function SettlementDetailPage() {
             </p>
           )}
 
-          {/* 송금 계좌 정보 */}
-          {myItem.status === 'unpaid' && settlement.profiles?.account_number && (
-            <div className="rounded-xl p-3 mb-3"
-              style={{
-                background: 'rgba(255,255,255,0.06)',
-                border: '0.5px solid rgba(255,255,255,0.1)',
-              }}>
-              <p className="text-xs font-black mb-1" style={{ color: 'var(--text-hint)' }}>
-                송금 계좌
-              </p>
-              <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                {settlement.profiles.bank_name} {settlement.profiles.account_number}
-              </p>
-              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                {settlement.profiles.account_holder ?? settlement.profiles.name}
-              </p>
-            </div>
-          )}
-
-          {/* unpaid 상태: 송금 버튼 */}
+          {/* unpaid 상태 */}
           {myItem.status === 'unpaid' && (
             <div className="flex flex-col gap-2">
               {settlement.profiles?.account_number && (
+                <div className="rounded-xl p-3 mb-1"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '0.5px solid rgba(255,255,255,0.1)',
+                  }}>
+                  <p className="text-xs font-black mb-1" style={{ color: 'var(--text-hint)' }}>
+                    송금 계좌
+                  </p>
+                  <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                    {settlement.profiles.bank_name} {settlement.profiles.account_number}
+                  </p>
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {settlement.profiles.account_holder ?? settlement.profiles.name}
+                  </p>
+                </div>
+              )}
+
+              {settlement.profiles?.account_number && (
                 <button
+                  type="button"
                   onClick={() => openToss(
                     settlement.profiles!.account_number!,
                     settlement.profiles!.bank_name ?? '',
                     myItem.amount,
                     settlement.profiles!.name,
                   )}
-                  className="w-full py-3 rounded-xl text-sm font-black btn-press"
+                  className="w-full py-3 rounded-xl text-sm font-black"
                   style={{ background: '#3182F6', color: '#fff' }}>
-                  토스로 송금하기
+                  간편 송금하기
                 </button>
               )}
+
               {settlement.profiles?.account_number && (
                 <button
+                  type="button"
                   onClick={() => copyAccount(settlement.profiles!.account_number!)}
-                  className="w-full py-2.5 rounded-xl text-xs font-black btn-press"
+                  className="w-full py-2.5 rounded-xl text-xs font-black"
                   style={{
                     background: 'rgba(255,255,255,0.06)',
                     color: 'var(--text-tertiary)',
@@ -360,23 +340,32 @@ export default function SettlementDetailPage() {
                   계좌번호 복사
                 </button>
               )}
-              {/* 송금 완료 신고 버튼 */}
+
               <button
+                type="button"
+                disabled={actionLoading === myItem.id}
                 onClick={() => handleMarkPending(myItem.id)}
-                className="w-full py-2.5 rounded-xl text-xs font-black btn-press"
+                className="w-full py-2.5 rounded-xl text-xs font-black"
                 style={{
                   background: 'rgba(255,214,0,0.1)',
                   color: '#FFD700',
                   border: '0.5px solid rgba(255,214,0,0.3)',
+                  opacity: actionLoading === myItem.id ? 0.5 : 1,
                 }}>
-                송금했어요 (확인 요청)
+                {actionLoading === myItem.id ? '처리 중...' : '송금했어요 (확인 요청)'}
               </button>
+
+              {!settlement.profiles?.account_number && (
+                <p className="text-xs text-center mt-1" style={{ color: 'var(--text-hint)' }}>
+                  요청자가 계좌 정보를 등록하지 않았어요. 직접 연락해주세요.
+                </p>
+              )}
             </div>
           )}
 
-          {/* pending 상태: 확인 대기 안내 */}
+          {/* pending 상태 */}
           {myItem.status === 'pending' && (
-            <div className="rounded-xl p-3 text-center"
+            <div className="rounded-xl p-4 text-center"
               style={{
                 background: 'rgba(255,214,0,0.08)',
                 border: '0.5px solid rgba(255,214,0,0.2)',
@@ -384,58 +373,43 @@ export default function SettlementDetailPage() {
               <p className="text-xs font-black mb-1" style={{ color: '#FFD700' }}>
                 송금 확인 요청 완료
               </p>
-              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+              <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>
                 요청자가 확인 후 납부 완료 처리해요
               </p>
-              {/* 취소 버튼 */}
               <button
-                onClick={() => handleMarkPending(myItem.id)}
-                className="mt-2 text-xs font-black btn-press"
-                style={{ color: 'rgba(255,255,255,0.2)' }}
-                onClickCapture={async (e) => {
-                  e.stopPropagation()
-                  await supabase.from('settlement_items')
-                    .update({ status: 'unpaid' })
-                    .eq('id', myItem.id)
-                  fetchData()
+                type="button"
+                disabled={actionLoading === myItem.id}
+                onClick={() => handleCancelPending(myItem.id)}
+                className="text-xs font-black px-4 py-2 rounded-lg"
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  color: 'var(--text-tertiary)',
+                  border: '0.5px solid var(--border-primary)',
+                  opacity: actionLoading === myItem.id ? 0.5 : 1,
                 }}>
-                취소
+                {actionLoading === myItem.id ? '처리 중...' : '취소'}
               </button>
             </div>
           )}
 
           {/* paid 상태 */}
-          {myItem.status === 'paid' && myItem.paid_at && (
-            <p className="text-xs" style={{ color: 'rgba(46,204,113,0.6)' }}>
-              {new Date(myItem.paid_at).toLocaleDateString('ko-KR', {
-                month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-              })} 확인 완료
-            </p>
-          )}
-
-          {/* 계좌 미등록 안내 */}
-          {myItem.status === 'unpaid' && !settlement.profiles?.account_number && (
+          {myItem.status === 'paid' && (
             <div className="rounded-xl p-3 text-center"
               style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '0.5px solid var(--border-primary)',
+                background: 'rgba(46,204,113,0.1)',
+                border: '0.5px solid rgba(46,204,113,0.2)',
               }}>
-              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                요청자가 계좌 정보를 등록하지 않았어요
+              <p className="text-sm font-black mb-0.5" style={{ color: 'var(--accent-green)' }}>
+                납부 완료
               </p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                직접 연락해서 계좌를 확인해주세요
-              </p>
-              <button
-                onClick={() => handleMarkPending(myItem.id)}
-                className="mt-2 w-full py-2 rounded-xl text-xs font-black btn-press"
-                style={{
-                  background: 'rgba(255,214,0,0.1)',
-                  color: '#FFD700',
-                  border: '0.5px solid rgba(255,214,0,0.3)',
-                }}>
-                송금했어요 (확인 요청)
-              </button>
+              {myItem.paid_at && (
+                <p className="text-xs" style={{ color: 'rgba(46,204,113,0.6)' }}>
+                  {new Date(myItem.paid_at).toLocaleDateString('ko-KR', {
+                    month: 'long', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                  })} 확인 완료
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -459,7 +433,7 @@ export default function SettlementDetailPage() {
 
         <div className="flex flex-col gap-2">
           {items.map(item => {
-            const sc = statusColor(item.status)
+            const sc = statusStyle(item.status)
             return (
               <div key={item.id}
                 className="flex items-center gap-3 rounded-xl px-3 py-3"
@@ -498,16 +472,19 @@ export default function SettlementDetailPage() {
                   </span>
                 </div>
 
-                {/* 요청자/운영진: 납부 확인 버튼 */}
                 {canConfirm ? (
-                  <button onClick={() => handleMarkPaid(item.id, item.status)}
-                    className="text-xs font-black px-2.5 py-1.5 rounded-lg flex-shrink-0 btn-press"
+                  <button
+                    type="button"
+                    disabled={actionLoading === item.id}
+                    onClick={() => handleMarkPaid(item.id, item.status)}
+                    className="text-xs font-black px-2.5 py-1.5 rounded-lg flex-shrink-0"
                     style={{
                       background: sc.bg,
                       color: sc.color,
                       border: `0.5px solid ${sc.color}40`,
+                      opacity: actionLoading === item.id ? 0.5 : 1,
                     }}>
-                    {statusLabel(item.status)}
+                    {actionLoading === item.id ? '...' : statusLabel(item.status)}
                   </button>
                 ) : (
                   <span className="text-xs font-black px-2.5 py-1.5 rounded-lg flex-shrink-0"
