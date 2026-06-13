@@ -3,56 +3,35 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-
-type Profile = {
-  id: string
-  name: string
-  generation: number
-  role: string
-  join_type: string
-  student_id: string | null
-  bio: string | null
-  avatar_url: string | null
-  bank_name: string | null
-  account_number: string | null
-  account_holder: string | null
-}
+import { useProfile } from '@/contexts/ProfileContext'
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { profile, loading: profileLoading, refetch } = useProfile()
   const [editMode, setEditMode] = useState(false)
   const [name, setName] = useState('')
   const [bio, setBio] = useState('')
   const [generation, setGeneration] = useState('')
   const [joinType, setJoinType] = useState('')
+  const [bankName, setBankName] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [accountHolder, setAccountHolder] = useState('')
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
-  const [bankName, setBankName] = useState('')
-  const [accountNumber, setAccountNumber] = useState('')
-  const [accountHolder, setAccountHolder] = useState('')
-  useEffect(() => {
-    const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
 
-      const { data } = await supabase
-        .from('profiles').select('*').eq('id', user.id).single()
-      setBankName(data?.bank_name ?? '')
-setAccountNumber(data?.account_number ?? '')
-setAccountHolder(data?.account_holder ?? '')
-      setProfile(data)
-      setName(data?.name ?? '')
-      setBio(data?.bio ?? '')
-      setGeneration(String(data?.generation ?? ''))
-      setJoinType(data?.join_type ?? 'student')
-      setLoading(false)
-    }
-    fetchProfile()
-  }, [])
+  // profile 로드 시 폼 초기화
+  useEffect(() => {
+    if (!profile) return
+    setName(profile.name ?? '')
+    setBio(profile.bio ?? '')
+    setGeneration(String(profile.generation ?? ''))
+    setJoinType(profile.join_type ?? 'student')
+    setBankName(profile.bank_name ?? '')
+    setAccountNumber(profile.account_number ?? '')
+    setAccountHolder(profile.account_holder ?? '')
+  }, [profile])
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -62,14 +41,15 @@ setAccountHolder(data?.account_holder ?? '')
     const ext = file.name.split('.').pop()
     const fileName = `${profile.id}/avatar.${ext}`
 
-    const { error } = await supabase.storage.from('avatars').upload(fileName, file, { upsert: true })
+    const { error } = await supabase.storage
+      .from('avatars').upload(fileName, file, { upsert: true })
     if (error) { alert('업로드 실패: ' + error.message); setAvatarUploading(false); return }
 
     const { data } = supabase.storage.from('avatars').getPublicUrl(fileName)
     const avatarUrl = data.publicUrl + '?t=' + Date.now()
 
     await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', profile.id)
-    setProfile(prev => prev ? { ...prev, avatar_url: avatarUrl } : prev)
+    await refetch() // Context 전역 갱신
     setAvatarUploading(false)
   }
 
@@ -78,24 +58,29 @@ setAccountHolder(data?.account_holder ?? '')
     setSubmitting(true)
 
     await supabase.from('profiles').update({
-  name, bio,
-  generation: parseInt(generation),
-  join_type: joinType,
-  bank_name: bankName || null,
-  account_number: accountNumber || null,
-  account_holder: accountHolder || null,
-}).eq('id', profile.id)
+      name, bio,
+      generation: parseInt(generation),
+      join_type: joinType,
+      bank_name: bankName || null,
+      account_number: accountNumber || null,
+      account_holder: accountHolder || null,
+    }).eq('id', profile.id)
 
-setProfile(prev => prev ? {
-  ...prev, name, bio,
-  generation: parseInt(generation),
-  join_type: joinType,
-  bank_name: bankName || null,
-  account_number: accountNumber || null,
-  account_holder: accountHolder || null,
-} : prev)
+    await refetch() // Context 전역 갱신
     setEditMode(false)
     setSubmitting(false)
+  }
+
+  const handleCancel = () => {
+    if (!profile) return
+    setName(profile.name ?? '')
+    setBio(profile.bio ?? '')
+    setGeneration(String(profile.generation ?? ''))
+    setJoinType(profile.join_type ?? 'student')
+    setBankName(profile.bank_name ?? '')
+    setAccountNumber(profile.account_number ?? '')
+    setAccountHolder(profile.account_holder ?? '')
+    setEditMode(false)
   }
 
   const handleLogout = async () => {
@@ -113,7 +98,7 @@ setProfile(prev => prev ? {
     color: 'var(--text-primary)',
   }
 
-  if (loading) return (
+  if (profileLoading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
@@ -142,16 +127,7 @@ setProfile(prev => prev ? {
               style={{ background: 'var(--ski-blue)' }}>
               {submitting ? '저장 중...' : '저장'}
             </button>
-            <button onClick={() => {
-              setEditMode(false)
-              setName(profile.name)
-              setBio(profile.bio ?? '')
-              setGeneration(String(profile.generation))
-              setJoinType(profile.join_type)
-              setBankName(profile.bank_name ?? '')
-setAccountNumber(profile.account_number ?? '')
-setAccountHolder(profile.account_holder ?? '')
-            }}
+            <button onClick={handleCancel}
               className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
               style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-tertiary)' }}>
               취소
@@ -165,8 +141,7 @@ setAccountHolder(profile.account_holder ?? '')
         style={{
           background: 'linear-gradient(135deg, #1B3FAB 0%, #2E55C8 100%)',
           boxShadow: '0 8px 32px rgba(27,63,171,0.3)',
-        }}
-      >
+        }}>
         <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
           style={{ background: 'white', transform: 'translate(30%,-30%)' }} />
 
@@ -179,19 +154,17 @@ setAccountHolder(profile.account_holder ?? '')
           ) : (
             <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black"
               style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
-              {profile.name[0]}
+              {profile.name?.[0]}
             </div>
           )}
-          <button
-            onClick={() => avatarInputRef.current?.click()}
+          <button onClick={() => avatarInputRef.current?.click()}
             disabled={avatarUploading}
             className="absolute bottom-0 right-0 w-7 h-7 rounded-full flex items-center justify-center shadow btn-press"
-            style={{ background: '#fff', color: 'var(--ski-blue)' }}
-          >
+            style={{ background: '#fff', color: 'var(--ski-blue)' }}>
             {avatarUploading ? (
-              <span className="text-xs">...</span>
+              <span className="text-[10px] font-black">...</span>
             ) : (
-              <i className="ti ti-camera" style={{ fontSize: 13 }} aria-hidden="true" />
+              <span className="text-sm">📷</span>
             )}
           </button>
           <input ref={avatarInputRef} type="file" accept="image/*"
@@ -200,7 +173,7 @@ setAccountHolder(profile.account_holder ?? '')
 
         {editMode ? (
           <input type="text" value={name} onChange={e => setName(e.target.value)}
-            className="text-xl font-black text-center rounded-xl px-3 py-1 w-full max-w-[200px] mx-auto block"
+            className="text-xl font-black text-center rounded-xl px-3 py-1 w-full max-w-[200px] mx-auto block mb-1"
             style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none' }} />
         ) : (
           <p className="text-xl font-black mb-1" style={{ color: '#fff' }}>{profile.name}</p>
@@ -217,139 +190,129 @@ setAccountHolder(profile.account_holder ?? '')
 
       {/* 기본 정보 */}
       <div className="rounded-2xl p-5 mb-4"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
-      >
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
         <h2 className="text-xs font-black tracking-widest uppercase mb-3"
           style={{ color: 'var(--text-hint)' }}>기본 정보</h2>
 
-        <div className="flex justify-between items-center py-2.5"
-          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
-          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>이름</span>
-          {editMode ? (
-            <input type="text" value={name} onChange={e => setName(e.target.value)}
-              className="text-sm font-bold rounded-lg px-3 py-1.5 text-right"
-              style={inputStyle} />
-          ) : (
-            <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-              {profile.name}
-            </span>
-          )}
-        </div>
-
-        <div className="flex justify-between items-center py-2.5"
-          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
-          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>기수</span>
-          {editMode ? (
-            <input type="number" value={generation} onChange={e => setGeneration(e.target.value)}
-              className="text-sm font-bold rounded-lg px-3 py-1.5 text-right w-24"
-              style={inputStyle} />
-          ) : (
-            <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-              {profile.generation}기
-            </span>
-          )}
-        </div>
-
-        <div className="flex justify-between items-center py-2.5"
-          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
-          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>구분</span>
-          {editMode ? (
-            <select value={joinType} onChange={e => setJoinType(e.target.value)}
-              className="text-sm font-bold rounded-lg px-3 py-1.5"
-              style={inputStyle}>
-              <option value="student">재학생</option>
-              <option value="ob">졸업생 / OB</option>
-            </select>
-          ) : (
-            <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-              {profile.join_type === 'ob' ? '졸업생 / OB' : '재학생'}
-            </span>
-          )}
-        </div>
-
-        {profile.student_id && (
-          <div className="flex justify-between items-center py-2.5"
-            style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
-            <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>학번</span>
-            <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-              {profile.student_id}
-            </span>
+        {[
+          {
+            label: '이름',
+            view: profile.name,
+            edit: <input type="text" value={name} onChange={e => setName(e.target.value)}
+              className="text-sm font-bold rounded-lg px-3 py-1.5 text-right" style={inputStyle} />,
+          },
+          {
+            label: '기수',
+            view: `${profile.generation}기`,
+            edit: <input type="number" value={generation}
+              onChange={e => setGeneration(e.target.value)}
+              className="text-sm font-bold rounded-lg px-3 py-1.5 text-right w-24" style={inputStyle} />,
+          },
+          {
+            label: '구분',
+            view: profile.join_type === 'ob' ? '졸업생 / OB' : '재학생',
+            edit: (
+              <select value={joinType} onChange={e => setJoinType(e.target.value)}
+                className="text-sm font-bold rounded-lg px-3 py-1.5" style={inputStyle}>
+                <option value="student">재학생</option>
+                <option value="ob">졸업생 / OB</option>
+              </select>
+            ),
+          },
+          ...(profile.student_id ? [{
+            label: '학번',
+            view: profile.student_id,
+            edit: null,
+          }] : []),
+          {
+            label: '권한',
+            view: null,
+            edit: null,
+            custom: (
+              <span className="text-xs font-black px-2.5 py-1 rounded-full"
+                style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
+                {roleLabel[profile.role]}
+              </span>
+            ),
+          },
+        ].map((item, i, arr) => (
+          <div key={item.label}
+            className="flex justify-between items-center py-2.5"
+            style={{
+              borderBottom: i < arr.length - 1
+                ? '0.5px solid var(--border-primary)' : 'none'
+            }}>
+            <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{item.label}</span>
+            {item.custom ? item.custom : (
+              editMode && item.edit ? item.edit : (
+                <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                  {item.view}
+                </span>
+              )
+            )}
           </div>
-        )}
-
-        <div className="flex justify-between items-center py-2.5">
-          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>권한</span>
-          <span className="text-xs font-black px-2.5 py-1 rounded-full"
-            style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
-            {roleLabel[profile.role]}
-          </span>
-        </div>
+        ))}
       </div>
 
       {/* 계좌 정보 */}
-<div className="rounded-2xl p-5 mb-4"
-  style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
->
-  <h2 className="text-xs font-black tracking-widest uppercase mb-3"
-    style={{ color: 'var(--text-hint)' }}>계좌 정보</h2>
-  <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>
-    정산 요청 시 송금받을 계좌를 등록해주세요
-  </p>
-  {editMode ? (
-    <div className="flex flex-col gap-2">
-      <input type="text" placeholder="은행명 (예: 토스뱅크, 카카오뱅크)"
-        value={bankName} onChange={e => setBankName(e.target.value)}
-        className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
-      <input type="text" placeholder="계좌번호"
-        value={accountNumber} onChange={e => setAccountNumber(e.target.value)}
-        className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
-      <input type="text" placeholder="예금주"
-        value={accountHolder} onChange={e => setAccountHolder(e.target.value)}
-        className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
-    </div>
-  ) : (
-    profile.bank_name && profile.account_number ? (
-      <div className="flex flex-col gap-1.5">
-        <div className="flex justify-between py-2"
-          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
-          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>은행</span>
-          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-            {profile.bank_name}
-          </span>
-        </div>
-        <div className="flex justify-between py-2"
-          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
-          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>계좌번호</span>
-          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-            {profile.account_number}
-          </span>
-        </div>
-        <div className="flex justify-between py-2">
-          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>예금주</span>
-          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-            {profile.account_holder}
-          </span>
-        </div>
+      <div className="rounded-2xl p-5 mb-4"
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+        <h2 className="text-xs font-black tracking-widest uppercase mb-1"
+          style={{ color: 'var(--text-hint)' }}>계좌 정보</h2>
+        <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>
+          정산 요청 시 송금받을 계좌를 등록해주세요
+        </p>
+
+        {editMode ? (
+          <div className="flex flex-col gap-2">
+            <input type="text" placeholder="은행명 (예: 토스뱅크, 카카오뱅크)"
+              value={bankName} onChange={e => setBankName(e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
+            <input type="text" placeholder="계좌번호"
+              value={accountNumber} onChange={e => setAccountNumber(e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
+            <input type="text" placeholder="예금주"
+              value={accountHolder} onChange={e => setAccountHolder(e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
+          </div>
+        ) : profile.bank_name && profile.account_number ? (
+          <div className="flex flex-col gap-0">
+            {[
+              { label: '은행', value: profile.bank_name },
+              { label: '계좌번호', value: profile.account_number },
+              { label: '예금주', value: profile.account_holder ?? profile.name },
+            ].map((item, i, arr) => (
+              <div key={item.label}
+                className="flex justify-between py-2.5"
+                style={{
+                  borderBottom: i < arr.length - 1
+                    ? '0.5px solid var(--border-primary)' : 'none'
+                }}>
+                <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                  {item.label}
+                </span>
+                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {item.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
+            등록된 계좌가 없어요
+          </p>
+        )}
       </div>
-    ) : (
-      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
-        등록된 계좌가 없어요
-      </p>
-    )
-  )}
-</div>
 
       {/* 자기소개 */}
       <div className="rounded-2xl p-5 mb-4"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
-      >
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
         <h2 className="text-xs font-black tracking-widest uppercase mb-3"
           style={{ color: 'var(--text-hint)' }}>자기소개</h2>
         {editMode ? (
           <textarea value={bio} onChange={e => setBio(e.target.value)}
             placeholder="스키 실력, 포지션, 하고 싶은 말 등 자유롭게 적어주세요"
-            rows={4}
-            className="w-full rounded-xl px-4 py-3 text-sm resize-none"
+            rows={4} className="w-full rounded-xl px-4 py-3 text-sm resize-none"
             style={inputStyle} />
         ) : (
           <p className="text-sm leading-relaxed"

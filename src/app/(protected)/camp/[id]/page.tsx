@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Camp = {
   id: string
@@ -41,12 +42,12 @@ type Guest = {
 export default function CampDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const { profile, loading: profileLoading } = useProfile()
   const supabase = createClient()
 
   const [camp, setCamp] = useState<Camp | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
   const [guests, setGuests] = useState<Guest[]>([])
-  const [profile, setProfile] = useState<{ id: string; role: string } | null>(null)
   const [myParticipations, setMyParticipations] = useState<Participant[]>([])
   const [loading, setLoading] = useState(true)
   const [currentMonth, setCurrentMonth] = useState<{ year: number; month: number } | null>(null)
@@ -71,13 +72,11 @@ export default function CampDetailPage() {
   const [guestFee, setGuestFee] = useState('')
 
   const fetchData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
+    if (!profile) return
 
-    const [{ data: campData }, { data: profileData }, { data: participantData }, { data: guestData }] =
+    const [{ data: campData }, { data: participantData }, { data: guestData }] =
       await Promise.all([
         supabase.from('camps').select('*').eq('id', id).single(),
-        supabase.from('profiles').select('id, role').eq('id', user.id).single(),
         supabase.from('camp_participants')
           .select('*, profiles(name, generation, avatar_url)')
           .eq('camp_id', id),
@@ -85,11 +84,10 @@ export default function CampDetailPage() {
       ])
 
     setCamp(campData)
-    setProfile(profileData)
     setParticipants(participantData ?? [])
     setGuests(guestData ?? [])
 
-    const mine = participantData?.filter(p => p.user_id === user.id) ?? []
+    const mine = participantData?.filter(p => p.user_id === profile.id) ?? []
     setMyParticipations(mine)
 
     if (campData) {
@@ -102,7 +100,9 @@ export default function CampDetailPage() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [id])
+  useEffect(() => {
+    if (profile) fetchData()
+  }, [profile, id])
 
   const isInRange = (date: string, start: string, end: string) =>
     date >= start && date <= end
@@ -141,7 +141,6 @@ export default function CampDetailPage() {
     if (date < camp.start_date || date > camp.end_date) return
 
     if (!applyMode) {
-      // 일반 모드 — 날짜 상세 패널
       if (selectedDate === date) {
         setSelectedDate(null)
         setShowPanel(false)
@@ -162,7 +161,6 @@ export default function CampDetailPage() {
       setSelectStep('end')
     } else {
       if (date < selectedStart!) {
-        // 종료일이 시작일보다 앞이면 시작일로 재설정
         setSelectedStart(date)
         setSelectedEnd(null)
         setSelectStep('end')
@@ -234,7 +232,7 @@ export default function CampDetailPage() {
   const getNights = (start: string, end: string) =>
     Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24))
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
@@ -364,18 +362,12 @@ export default function CampDetailPage() {
                 const dayNum = parseInt(date.split('-')[2])
                 const dayOfWeek = new Date(date + 'T00:00:00').getDay()
 
-                // 탭 선택 범위 표시
+                // 탭 선택 범위
                 const isStart = applyMode && selectedStart === date && isCampDate
                 const isEnd = applyMode && selectedEnd === date && isCampDate
                 const isInApplyRange = applyMode && selectedStart && selectedEnd &&
                   date >= selectedStart && date <= selectedEnd && isCampDate
                 const isSelected = selectedDate === date && !applyMode
-
-                // 오늘 하이라이트 (신청 단계 표시)
-                const isSelectingStep = applyMode && (
-                  (selectStep === 'start' && !selectedStart) ||
-                  (selectStep === 'end' && selectedStart && !selectedEnd)
-                )
 
                 let bg = 'transparent'
                 let borderRadius = '8px'
@@ -387,7 +379,8 @@ export default function CampDetailPage() {
                     bg = '#1B3FAB'; borderRadius = '8px'; scale = 1.08
                     shadow = '0 4px 12px rgba(27,63,171,0.5)'
                   } else if (isStart) {
-                    bg = '#1B3FAB'; borderRadius = selectedEnd ? '8px 0 0 8px' : '8px'
+                    bg = '#1B3FAB'
+                    borderRadius = selectedEnd ? '8px 0 0 8px' : '8px'
                     scale = 1.05; shadow = '0 4px 12px rgba(27,63,171,0.5)'
                   } else if (isEnd) {
                     bg = '#1B3FAB'; borderRadius = '0 8px 8px 0'
@@ -414,9 +407,6 @@ export default function CampDetailPage() {
                       transition: 'background 0.15s, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
                       opacity: isCampDate ? 1 : 0.15,
                       zIndex: scale > 1 ? 1 : 0,
-                      // 신청 모드에서 선택 가능한 날짜 강조
-                      outline: applyMode && isCampDate && isSelectingStep && !isStart && !isEnd
-                        ? '1px dashed rgba(127,164,255,0.3)' : 'none',
                     }}
                     onClick={() => isCampDate && handleDateTap(date)}
                   >
@@ -431,7 +421,6 @@ export default function CampDetailPage() {
                       {dayNum}
                     </span>
 
-                    {/* 도트 */}
                     {isCampDate && total > 0 && (
                       <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center"
                         style={{ maxWidth: 28 }}>
@@ -715,7 +704,6 @@ export default function CampDetailPage() {
             padding: '12px 20px 28px',
           }}>
           {!applyMode ? (
-            /* 일반 모드 */
             <div>
               {myParticipations.length > 0 && (
                 <div className="mb-3">
@@ -758,14 +746,12 @@ export default function CampDetailPage() {
               </button>
             </div>
           ) : (
-            /* 탭 선택 모드 */
             <div>
               <p className="text-xs font-black tracking-widest uppercase mb-3"
                 style={{ color: 'var(--text-hint)' }}>
                 {selectStep === 'start' ? '📍 달력에서 도착일을 탭하세요' : '📍 달력에서 출발일을 탭하세요'}
               </p>
 
-              {/* 날짜 선택 표시 */}
               <div className="flex items-center gap-2 mb-3">
                 <div className="flex-1 rounded-xl px-3 py-2.5 text-center"
                   style={{
@@ -806,10 +792,8 @@ export default function CampDetailPage() {
                 </div>
               </div>
 
-              {/* 박수 표시 */}
               {selectedStart && selectedEnd && (
-                <p className="text-xs text-center mb-3 font-black"
-                  style={{ color: 'var(--text-hint)' }}>
+                <p className="text-xs text-center mb-3 font-black" style={{ color: 'var(--text-hint)' }}>
                   {getNights(selectedStart, selectedEnd) > 0
                     ? `${getNights(selectedStart, selectedEnd)}박 ${getNights(selectedStart, selectedEnd) + 1}일`
                     : '당일'}
@@ -835,7 +819,6 @@ export default function CampDetailPage() {
                 </button>
               </div>
 
-              {/* 다시 선택 */}
               {selectedStart && (
                 <button
                   onClick={() => { setSelectedStart(null); setSelectedEnd(null); setSelectStep('start') }}

@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
 import { SkeletonList } from '@/components/Skeleton'
+import { useProfile } from '@/contexts/ProfileContext'
 
-type Profile = {
+type Member = {
   id: string
   name: string
   generation: number
@@ -17,47 +17,45 @@ type Profile = {
 }
 
 export default function MembersPage() {
-  const [members, setMembers] = useState<Profile[]>([])
+  const { profile, loading: profileLoading } = useProfile()
+  const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'student' | 'ob'>('all')
   const [selectedGeneration, setSelectedGeneration] = useState<number | null>(null)
-  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
       const { data } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, name, generation, role, join_type, student_id, bio, avatar_url')
         .neq('role', 'pending')
         .order('generation', { ascending: false })
         .order('name')
-
       setMembers(data ?? [])
       setLoading(false)
     }
     fetchData()
   }, [])
 
+  // 클라이언트 사이드 필터링
   const generations = [...new Set(members.map(m => m.generation))].sort((a, b) => b - a)
 
   const filtered = members.filter(m => {
-    const matchSearch = m.name.includes(search) || String(m.generation).includes(search)
+    const matchSearch = !search ||
+      m.name.includes(search) ||
+      String(m.generation).includes(search)
     const matchType = filterType === 'all' || m.join_type === filterType
     const matchGen = selectedGeneration === null || m.generation === selectedGeneration
     return matchSearch && matchType && matchGen
   })
 
   const grouped = filtered.reduce((acc, m) => {
-    const gen = m.generation
-    if (!acc[gen]) acc[gen] = []
-    acc[gen].push(m)
+    if (!acc[m.generation]) acc[m.generation] = []
+    acc[m.generation].push(m)
     return acc
-  }, {} as Record<number, Profile[]>)
+  }, {} as Record<number, Member[]>)
 
   const roleLabel: Record<string, string> = {
     member: '부원', ob: 'OB', admin: '운영진'
@@ -75,7 +73,13 @@ export default function MembersPage() {
     admin: 'var(--accent-orange)',
   }
 
-  if (loading) return (
+  const filterBtnStyle = (active: boolean) => ({
+    background: active ? 'var(--ski-blue)' : 'var(--bg-card)',
+    border: `0.5px solid ${active ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
+    color: active ? '#fff' : 'var(--text-tertiary)',
+  })
+
+  if (profileLoading || loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="h-8 rounded-full w-32 mb-5 animate-pulse"
         style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -88,22 +92,20 @@ export default function MembersPage() {
       <div className="mb-6">
         <p className="text-xs font-black tracking-widest uppercase mb-1"
           style={{ color: 'var(--text-hint)' }}>Directory</p>
-        <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>동문 디렉토리</h1>
+        <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>
+          동문 디렉토리
+        </h1>
       </div>
 
       {/* 검색 */}
-      <input
-        type="text"
-        placeholder="이름, 기수 검색"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
+      <input type="text" placeholder="이름, 기수 검색"
+        value={search} onChange={e => setSearch(e.target.value)}
         className="w-full rounded-xl px-4 py-3 text-sm mb-3"
         style={{
           background: 'var(--bg-secondary)',
           border: '0.5px solid var(--border-primary)',
           color: 'var(--text-primary)',
-        }}
-      />
+        }} />
 
       {/* 타입 필터 */}
       <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
@@ -112,16 +114,10 @@ export default function MembersPage() {
           { value: 'student', label: `재학생 ${members.filter(m => m.join_type === 'student').length}명` },
           { value: 'ob', label: `OB ${members.filter(m => m.join_type === 'ob').length}명` },
         ].map(f => (
-          <button
-            key={f.value}
+          <button key={f.value}
             onClick={() => setFilterType(f.value as 'all' | 'student' | 'ob')}
             className="text-xs font-bold px-3 py-1.5 rounded-full flex-shrink-0 transition-all btn-press"
-            style={{
-              background: filterType === f.value ? 'var(--ski-blue)' : 'var(--bg-card)',
-              border: `0.5px solid ${filterType === f.value ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
-              color: filterType === f.value ? '#fff' : 'var(--text-tertiary)',
-            }}
-          >
+            style={filterBtnStyle(filterType === f.value)}>
             {f.label}
           </button>
         ))}
@@ -129,28 +125,16 @@ export default function MembersPage() {
 
       {/* 기수 필터 */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        <button
-          onClick={() => setSelectedGeneration(null)}
+        <button onClick={() => setSelectedGeneration(null)}
           className="text-xs font-bold px-3 py-1.5 rounded-full flex-shrink-0 transition-all btn-press"
-          style={{
-            background: selectedGeneration === null ? 'var(--ski-blue)' : 'var(--bg-card)',
-            border: `0.5px solid ${selectedGeneration === null ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
-            color: selectedGeneration === null ? '#fff' : 'var(--text-tertiary)',
-          }}
-        >
+          style={filterBtnStyle(selectedGeneration === null)}>
           전체 기수
         </button>
         {generations.map(gen => (
-          <button
-            key={gen}
+          <button key={gen}
             onClick={() => setSelectedGeneration(selectedGeneration === gen ? null : gen)}
             className="text-xs font-bold px-3 py-1.5 rounded-full flex-shrink-0 transition-all btn-press"
-            style={{
-              background: selectedGeneration === gen ? 'var(--ski-blue)' : 'var(--bg-card)',
-              border: `0.5px solid ${selectedGeneration === gen ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
-              color: selectedGeneration === gen ? '#fff' : 'var(--text-tertiary)',
-            }}
-          >
+            style={filterBtnStyle(selectedGeneration === gen)}>
             {gen}기
           </button>
         ))}
@@ -159,9 +143,8 @@ export default function MembersPage() {
       {/* 부원 목록 */}
       {Object.keys(grouped).length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-4xl font-black mb-2" style={{ color: 'rgba(255,255,255,0.04)' }}>
-            NO RESULT
-          </p>
+          <p className="text-4xl font-black mb-2"
+            style={{ color: 'rgba(255,255,255,0.04)' }}>NO RESULT</p>
           <p className="text-sm" style={{ color: 'var(--text-hint)' }}>검색 결과가 없어요</p>
         </div>
       ) : (
@@ -171,9 +154,7 @@ export default function MembersPage() {
             .map(([gen, genMembers]) => (
               <div key={gen}>
                 <p className="text-xs font-black tracking-widest uppercase mb-3"
-                  style={{ color: 'var(--text-hint)' }}>
-                  {gen}기
-                </p>
+                  style={{ color: 'var(--text-hint)' }}>{gen}기</p>
                 <div className="flex flex-col gap-2">
                   {genMembers.map(m => (
                     <a key={m.id} href={`/members/${m.id}`}
@@ -181,14 +162,13 @@ export default function MembersPage() {
                       style={{
                         background: 'var(--bg-card)',
                         border: '0.5px solid var(--border-primary)',
-                      }}
-                    >
+                      }}>
                       {m.avatar_url ? (
                         <img src={m.avatar_url} alt={m.name}
                           className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
                       ) : (
                         <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-black flex-shrink-0"
-                          style={{ background: 'var(--ski-blue)' }}>
+                          style={{ background: m.id === profile?.id ? 'var(--accent-green)' : 'var(--ski-blue)' }}>
                           {m.name[0]}
                         </div>
                       )}
@@ -197,7 +177,11 @@ export default function MembersPage() {
                           <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
                             {m.name}
                           </p>
-                          <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                          {m.id === profile?.id && (
+                            <span className="text-xs font-black"
+                              style={{ color: 'var(--accent-green)' }}>나</span>
+                          )}
+                          <span className="text-xs font-black px-2 py-0.5 rounded-full"
                             style={{
                               background: roleColor[m.role] ?? 'rgba(255,255,255,0.06)',
                               color: roleTextColor[m.role] ?? 'var(--text-tertiary)',

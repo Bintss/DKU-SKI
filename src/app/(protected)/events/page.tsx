@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { SkeletonList } from '@/components/Skeleton'
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Event = {
   id: string
@@ -33,26 +34,23 @@ const EVENT_TYPE_COLOR: Record<string, string> = {
 }
 
 export default function EventsPage() {
+  const { profile, loading: profileLoading } = useProfile()
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
-  const [profile, setProfile] = useState<{ role: string } | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
-    const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const [{ data: profileData }, { data: eventsData }] = await Promise.all([
-        supabase.from('profiles').select('role').eq('id', user.id).single(),
-        supabase.from('events').select('*').order('start_date', { ascending: tab === 'upcoming' }),
-      ])
-      setProfile(profileData)
-      setEvents(eventsData ?? [])
+    const fetchEvents = async () => {
+      const { data } = await supabase
+        .from('events')
+        .select('*')
+        .order('start_date', { ascending: true })
+      setEvents(data ?? [])
       setLoading(false)
     }
-    fetchData()
-  }, [tab])
+    fetchEvents()
+  }, [])
 
   const today = new Date().toISOString().split('T')[0]
   const filtered = events.filter(e =>
@@ -86,7 +84,7 @@ export default function EventsPage() {
     return acc
   }, {} as Record<string, Event[]>)
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="h-8 rounded-full w-16 mb-5 animate-pulse"
         style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -111,8 +109,8 @@ export default function EventsPage() {
         )}
       </div>
 
-      {/* 탭 */}
-      <div className="flex gap-4 mb-6" style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
+      <div className="flex gap-4 mb-6"
+        style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
         {[
           { value: 'upcoming', label: '예정' },
           { value: 'past', label: '지난 행사' },
@@ -129,12 +127,10 @@ export default function EventsPage() {
         ))}
       </div>
 
-      {/* 타임라인 */}
       {Object.keys(grouped).length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-4xl font-black mb-2" style={{ color: 'rgba(255,255,255,0.05)' }}>
-            ALL CLEAR
-          </p>
+          <p className="text-4xl font-black mb-2"
+            style={{ color: 'rgba(255,255,255,0.05)' }}>ALL CLEAR</p>
           <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
             {tab === 'upcoming' ? '예정된 행사가 없어요' : '지난 행사가 없어요'}
           </p>
@@ -152,14 +148,12 @@ export default function EventsPage() {
                   const typeLabel = EVENT_TYPE_LABEL[event.type] ?? 'Event'
 
                   return (
-                    <a key={event.id}
-                      href={`/events/${event.id}`}
+                    <a key={event.id} href={`/events/${event.id}`}
                       className="flex items-center gap-4 p-4 rounded-2xl card-hover btn-press"
                       style={{
                         background: 'var(--bg-card)',
                         border: '0.5px solid var(--border-primary)',
                       }}>
-                      {/* 날짜 블록 */}
                       <div className="flex-shrink-0 w-12 text-center">
                         <p className="text-xs font-black uppercase"
                           style={{ color: 'var(--text-hint)' }}>
@@ -174,11 +168,9 @@ export default function EventsPage() {
                         </p>
                       </div>
 
-                      {/* 컬러 구분선 */}
                       <div className="w-0.5 h-12 rounded-full flex-shrink-0"
                         style={{ background: typeColor }} />
 
-                      {/* 내용 */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-xs font-black px-2 py-0.5 rounded-full"
@@ -204,7 +196,6 @@ export default function EventsPage() {
                         )}
                       </div>
 
-                      {/* 신청 상태 */}
                       <div className="flex-shrink-0">
                         <span className="text-xs font-black px-2.5 py-1 rounded-full"
                           style={{

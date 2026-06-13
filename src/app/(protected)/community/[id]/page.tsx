@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Post = {
   id: string
@@ -31,36 +32,37 @@ const CHANNEL_LABEL: Record<string, string> = {
 export default function PostDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const { profile, loading: profileLoading } = useProfile()
   const supabase = createClient()
 
   const [post, setPost] = useState<Post | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
-  const [profile, setProfile] = useState<{ id: string; role: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const commentInputRef = useRef<HTMLInputElement>(null)
 
   const fetchData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
+    if (!profile) return
 
-    const [{ data: postData }, { data: profileData }, { data: commentData }] =
-      await Promise.all([
-        supabase.from('posts').select('*, profiles(name, generation, avatar_url)').eq('id', id).single(),
-        supabase.from('profiles').select('id, role').eq('id', user.id).single(),
-        supabase.from('comments')
-          .select('*, profiles(name, generation, avatar_url)')
-          .eq('post_id', id)
-          .order('created_at', { ascending: true }),
-      ])
+    const [{ data: postData }, { data: commentData }] = await Promise.all([
+      supabase.from('posts')
+        .select('*, profiles(name, generation, avatar_url)')
+        .eq('id', id).single(),
+      supabase.from('comments')
+        .select('*, profiles(name, generation, avatar_url)')
+        .eq('post_id', id)
+        .order('created_at', { ascending: true }),
+    ])
 
     setPost(postData)
-    setProfile(profileData)
     setComments(commentData ?? [])
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [id])
+  useEffect(() => {
+    if (profile) fetchData()
+  }, [profile, id])
 
   const getAuthorDisplay = (isAnonymous: boolean, profiles: Post['profiles']) => {
     if (!isAnonymous) return {
@@ -86,14 +88,18 @@ export default function PostDetailPage() {
     e.preventDefault()
     if (!newComment.trim() || !profile) return
     setSubmitting(true)
+
     await supabase.from('comments').insert({
       post_id: id as string,
       author_id: profile.id,
       content: newComment.trim(),
     })
+
     setNewComment('')
     setSubmitting(false)
-    fetchData()
+    await fetchData()
+    // 댓글 등록 후 입력창 포커스
+    commentInputRef.current?.focus()
   }
 
   const handleDeleteComment = async (commentId: string) => {
@@ -117,7 +123,7 @@ export default function PostDetailPage() {
     return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
   }
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
@@ -139,8 +145,7 @@ export default function PostDetailPage() {
           style={{ color: 'var(--text-tertiary)' }}>← 목록</a>
         {canDelete && (
           <button onClick={handleDeletePost}
-            className="text-xs font-bold"
-            style={{ color: '#FF6B6B' }}>
+            className="text-xs font-black btn-press" style={{ color: '#FF6B6B' }}>
             삭제
           </button>
         )}
@@ -148,8 +153,7 @@ export default function PostDetailPage() {
 
       {/* 게시글 */}
       <div className="rounded-2xl p-5 mb-4"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
-      >
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
         <span className="text-xs font-black px-2.5 py-1 rounded-full mb-3 inline-block"
           style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
           {CHANNEL_LABEL[post.channel]}
@@ -181,7 +185,7 @@ export default function PostDetailPage() {
             </span>
           )}
           {post.is_anonymous && profile?.role === 'admin' && (
-            <span className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+            <span className="text-xs font-black px-1.5 py-0.5 rounded-full"
               style={{ background: 'rgba(230,126,34,0.2)', color: 'var(--accent-orange)' }}>
               익명
             </span>
@@ -203,8 +207,7 @@ export default function PostDetailPage() {
 
       {/* 댓글 */}
       <div className="rounded-2xl p-5"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
-      >
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
         <h2 className="text-xs font-black tracking-widest uppercase mb-4"
           style={{ color: 'var(--text-hint)' }}>
           댓글 <span style={{ color: 'var(--text-tertiary)' }}>{comments.length}</span>
@@ -240,7 +243,7 @@ export default function PostDetailPage() {
                     </span>
                     {(profile?.id === c.author_id || profile?.role === 'admin') && (
                       <button onClick={() => handleDeleteComment(c.id)}
-                        className="text-xs font-bold"
+                        className="text-xs font-black btn-press"
                         style={{ color: 'rgba(255,107,107,0.5)' }}>
                         삭제
                       </button>
@@ -255,10 +258,11 @@ export default function PostDetailPage() {
           </div>
         )}
 
+        {/* 댓글 입력 */}
         <form onSubmit={handleAddComment} className="flex gap-2"
-          style={{ borderTop: '0.5px solid var(--border-primary)', paddingTop: '16px' }}
-        >
+          style={{ borderTop: '0.5px solid var(--border-primary)', paddingTop: '16px' }}>
           <input
+            ref={commentInputRef}
             type="text"
             placeholder="댓글을 입력해주세요"
             value={newComment}
@@ -270,12 +274,10 @@ export default function PostDetailPage() {
               color: 'var(--text-primary)',
             }}
           />
-          <button
-            type="submit"
+          <button type="submit"
             disabled={submitting || !newComment.trim()}
             className="text-white px-4 rounded-xl text-sm font-black disabled:opacity-50 flex-shrink-0 btn-press"
-            style={{ background: 'var(--ski-blue)' }}
-          >
+            style={{ background: 'var(--ski-blue)' }}>
             등록
           </button>
         </form>

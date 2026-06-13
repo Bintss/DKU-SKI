@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
 import { SkeletonList } from '@/components/Skeleton'
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Camp = {
   id: string
@@ -20,24 +20,18 @@ type Camp = {
 }
 
 export default function CampPage() {
+  const { profile, loading: profileLoading } = useProfile()
   const [camps, setCamps] = useState<Camp[]>([])
-  const [profile, setProfile] = useState<{ role: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
-  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
-      const [{ data: profileData }, { data: campData }] = await Promise.all([
-        supabase.from('profiles').select('role').eq('id', user.id).single(),
-        supabase.from('camps').select('*').order('start_date', { ascending: false }),
-      ])
-
-      setProfile(profileData)
+      const { data: campData } = await supabase
+        .from('camps')
+        .select('*')
+        .order('start_date', { ascending: false })
       setCamps(campData ?? [])
       setLoading(false)
     }
@@ -68,7 +62,7 @@ export default function CampPage() {
     return `${String(s.getMonth() + 1).padStart(2, '0')}.${String(s.getDate()).padStart(2, '0')} — ${String(e.getMonth() + 1).padStart(2, '0')}.${String(e.getDate()).padStart(2, '0')}`
   }
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="h-8 rounded-full w-16 mb-5 animate-pulse"
         style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -96,7 +90,6 @@ export default function CampPage() {
         )}
       </div>
 
-      {/* 탭 */}
       <div className="flex gap-4 mb-6" style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
         {[
           { value: 'upcoming', label: '예정' },
@@ -114,7 +107,6 @@ export default function CampPage() {
         ))}
       </div>
 
-      {/* 목록 */}
       {filtered.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-4xl font-black mb-2" style={{ color: 'rgba(255,255,255,0.05)' }}>
@@ -148,7 +140,9 @@ export default function CampPage() {
                     ? '0.5px solid rgba(255,255,255,0.15)'
                     : '0.5px solid var(--border-primary)',
                   backdropFilter: isFirst ? 'blur(12px)' : 'none',
-                  boxShadow: isFirst ? '0 8px 32px rgba(27,63,171,0.3), inset 0 1px 0 rgba(255,255,255,0.1)' : 'none',
+                  boxShadow: isFirst
+                    ? '0 8px 32px rgba(27,63,171,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
+                    : 'none',
                 }}>
                 <div className="p-5">
                   <div className="flex items-center justify-between mb-3">
@@ -166,19 +160,16 @@ export default function CampPage() {
                       </span>
                     )}
                   </div>
-
                   <h2 className="text-xl font-black leading-tight mb-4"
                     style={{ color: isFirst ? '#fff' : 'var(--text-primary)' }}>
                     {camp.title}
                   </h2>
-
                   <div className="flex items-center gap-3 text-sm flex-wrap"
                     style={{ color: isFirst ? 'rgba(255,255,255,0.5)' : 'var(--text-tertiary)' }}>
                     <span className="font-semibold">{formatDateRange(camp.start_date, camp.end_date)}</span>
                     <span className="text-xs">{nights}박 {nights + 1}일</span>
                     {camp.location && <><span>·</span><span className="truncate">{camp.location}</span></>}
                   </div>
-
                   <div className="flex items-center justify-between mt-4">
                     <span className="text-xs font-black px-2.5 py-1 rounded-full"
                       style={{

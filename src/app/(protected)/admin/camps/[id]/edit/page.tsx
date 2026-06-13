@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 
 export default function EditCampPage() {
   const { id } = useParams()
   const router = useRouter()
+  const { profile, loading: profileLoading } = useProfile()
   const supabase = createClient()
 
   const [title, setTitle] = useState('')
@@ -30,12 +32,18 @@ export default function EditCampPage() {
   }
 
   useEffect(() => {
+    if (!profile) return
+    if (profile.role !== 'admin') { router.push('/camp'); return }
+
     const fetchCamp = async () => {
       const { data } = await supabase.from('camps').select('*').eq('id', id).single()
       if (data) {
-        setTitle(data.title); setSeason(data.season)
-        setStartDate(data.start_date); setEndDate(data.end_date)
-        setLocation(data.location ?? ''); setDescription(data.description ?? '')
+        setTitle(data.title)
+        setSeason(data.season)
+        setStartDate(data.start_date)
+        setEndDate(data.end_date)
+        setLocation(data.location ?? '')
+        setDescription(data.description ?? '')
         setMaxParticipants(data.max_participants ? String(data.max_participants) : '')
         setGuestFee(String(data.guest_fee))
         setDeadline(data.deadline ? new Date(data.deadline).toISOString().slice(0, 16) : '')
@@ -44,15 +52,19 @@ export default function EditCampPage() {
       setLoading(false)
     }
     fetchCamp()
-  }, [id])
+  }, [profile, id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSubmitting(true); setError('')
+    setSubmitting(true)
+    setError('')
 
     const { error } = await supabase.from('camps').update({
-      title, season, start_date: startDate, end_date: endDate,
-      location: location || null, description: description || null,
+      title, season,
+      start_date: startDate,
+      end_date: endDate,
+      location: location || null,
+      description: description || null,
       max_participants: maxParticipants ? parseInt(maxParticipants) : null,
       guest_fee: parseInt(guestFee),
       deadline: deadline ? new Date(deadline).toISOString() : null,
@@ -69,7 +81,7 @@ export default function EditCampPage() {
     router.push('/camp')
   }
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
@@ -90,20 +102,26 @@ export default function EditCampPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {[
-          { label: '시즌', value: season, onChange: setSeason, type: 'text' },
-          { label: '합숙명', value: title, onChange: setTitle, type: 'text' },
-          { label: '장소', value: location, onChange: setLocation, type: 'text', required: false },
-        ].map(field => (
-          <div key={field.label}>
-            <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
-              style={{ color: 'var(--text-hint)' }}>{field.label}</label>
-            <input type={field.type} value={field.value}
-              onChange={e => field.onChange(e.target.value)}
-              className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle}
-              required={field.required !== false} />
-          </div>
-        ))}
+        <div>
+          <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+            style={{ color: 'var(--text-hint)' }}>시즌</label>
+          <input type="text" value={season} onChange={e => setSeason(e.target.value)}
+            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
+        </div>
+
+        <div>
+          <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+            style={{ color: 'var(--text-hint)' }}>합숙명</label>
+          <input type="text" value={title} onChange={e => setTitle(e.target.value)}
+            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
+        </div>
+
+        <div>
+          <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+            style={{ color: 'var(--text-hint)' }}>장소</label>
+          <input type="text" value={location} onChange={e => setLocation(e.target.value)}
+            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -131,7 +149,8 @@ export default function EditCampPage() {
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>신청 마감일</label>
-          <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)}
+          <input type="datetime-local" value={deadline}
+            onChange={e => setDeadline(e.target.value)}
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
         </div>
 
@@ -139,8 +158,8 @@ export default function EditCampPage() {
           <div>
             <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
               style={{ color: 'var(--text-hint)' }}>최대 인원</label>
-            <input type="number" placeholder="없으면 비워두세요" value={maxParticipants}
-              onChange={e => setMaxParticipants(e.target.value)}
+            <input type="number" placeholder="없으면 비워두세요"
+              value={maxParticipants} onChange={e => setMaxParticipants(e.target.value)}
               className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
           </div>
           <div>

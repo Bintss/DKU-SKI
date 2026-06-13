@@ -4,13 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { SkeletonHome } from '@/components/Skeleton'
-
-type Profile = {
-  name: string
-  generation: number
-  role: string
-  join_type: string
-}
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Camp = {
   id: string
@@ -29,36 +23,31 @@ type FinanceSummary = {
 }
 
 export default function HomePage() {
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const { profile, loading: profileLoading } = useProfile()
   const [upcomingCamp, setUpcomingCamp] = useState<Camp | null>(null)
   const [finance, setFinance] = useState<FinanceSummary | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [dataLoading, setDataLoading] = useState(true)
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
+    if (!profile) return
     const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
       const today = new Date().toISOString().split('T')[0]
 
       const [
-        { data: profileData },
         { data: campData },
         { data: financeData },
         { data: noticeData },
         { data: readData },
       ] = await Promise.all([
-        supabase.from('profiles').select('name, generation, role, join_type').eq('id', user.id).single(),
         supabase.from('camps').select('*').gte('end_date', today).order('start_date').limit(1).single(),
         supabase.from('finance').select('amount, type').eq('season', '2026-27'),
         supabase.from('notices').select('id'),
-        supabase.from('notice_reads').select('notice_id').eq('user_id', user.id),
+        supabase.from('notice_reads').select('notice_id').eq('user_id', profile.id),
       ])
 
-      setProfile(profileData)
       setUpcomingCamp(campData)
 
       if (financeData) {
@@ -69,11 +58,10 @@ export default function HomePage() {
 
       const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
       setUnreadCount((noticeData ?? []).filter(n => !readSet.has(n.id)).length)
-
-      setLoading(false)
+      setDataLoading(false)
     }
     fetchData()
-  }, [])
+  }, [profile])
 
   const roleLabel: Record<string, string> = {
     member: '부원', ob: 'OB', admin: '운영진', pending: '승인 대기'
@@ -90,7 +78,7 @@ export default function HomePage() {
   const getNights = (start: string, end: string) =>
     Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24))
 
-  if (loading) return (
+  if (profileLoading || dataLoading) return (
     <div className="max-w-lg mx-auto pt-4">
       <SkeletonHome />
     </div>
@@ -98,16 +86,13 @@ export default function HomePage() {
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      {/* 프로필 카드 */}
       <div className="fade-slide-up delay-1 rounded-2xl px-6 py-5 mb-4 relative overflow-hidden"
         style={{
           background: 'linear-gradient(135deg, #1B3FAB 0%, #2E55C8 100%)',
           boxShadow: '0 8px 32px rgba(27,63,171,0.3)',
-        }}
-      >
+        }}>
         <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
-          style={{ background: 'white', transform: 'translate(30%, -30%)' }}
-        />
+          style={{ background: 'white', transform: 'translate(30%, -30%)' }} />
         <p className="text-xs mb-1 font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>
           안녕하세요
         </p>
@@ -119,21 +104,13 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* 다음 합숙 */}
       {upcomingCamp && (
-        <a
-          href={`/camp/${upcomingCamp.id}`}
+        <a href={`/camp/${upcomingCamp.id}`}
           className="fade-slide-up delay-2 block rounded-2xl p-5 mb-4 card-hover btn-press"
-          style={{
-            background: 'var(--bg-card)',
-            border: '0.5px solid var(--border-primary)',
-          }}
-        >
+          style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-black tracking-widest uppercase"
-              style={{ color: 'var(--accent-blue)' }}>
-              다음 합숙
-            </span>
+              style={{ color: 'var(--accent-blue)' }}>다음 합숙</span>
             {upcomingCamp.deadline && (
               <span className="text-xs font-bold" style={{ color: '#FFD700' }}>
                 신청 {daysLeft(upcomingCamp.deadline)}
@@ -156,31 +133,19 @@ export default function HomePage() {
               }}>
               {upcomingCamp.is_open ? '신청 중' : '신청 마감'}
             </span>
-            <span className="text-xs font-bold" style={{ color: 'var(--accent-blue)' }}>
-              자세히 →
-            </span>
+            <span className="text-xs font-bold" style={{ color: 'var(--accent-blue)' }}>자세히 →</span>
           </div>
         </a>
       )}
 
-      {/* 재무 요약 */}
       {finance && (
-        <a
-          href="/finance"
+        <a href="/finance"
           className="fade-slide-up delay-3 block rounded-2xl p-5 mb-5 card-hover btn-press"
-          style={{
-            background: 'var(--bg-card)',
-            border: '0.5px solid var(--border-primary)',
-          }}
-        >
+          style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
           <div className="flex items-center justify-between mb-4">
             <p className="text-xs font-black tracking-widest uppercase"
-              style={{ color: 'var(--text-tertiary)' }}>
-              2026-27 재무 현황
-            </p>
-            <span className="text-xs font-bold" style={{ color: 'var(--text-hint)' }}>
-              자세히 →
-            </span>
+              style={{ color: 'var(--text-tertiary)' }}>2026-27 재무 현황</p>
+            <span className="text-xs font-bold" style={{ color: 'var(--text-hint)' }}>자세히 →</span>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -203,19 +168,17 @@ export default function HomePage() {
               </p>
             </div>
           </div>
-          <div className="mt-3 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-          <div className="mt-3 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <div className="mt-3 h-1 rounded-full overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.06)' }}>
             <div className="h-full rounded-full"
               style={{
-                width: `${Math.min((finance.totalExpense / finance.totalIncome) * 100, 100)}%`,
+                width: `${Math.min((finance.totalExpense / finance.totalIncome) * 100 || 0, 100)}%`,
                 background: 'var(--ski-blue)',
-              }}
-            />
+              }} />
           </div>
         </a>
       )}
 
-      {/* 빠른 메뉴 */}
       <div className="fade-slide-up delay-4 grid grid-cols-4 gap-2.5">
         {[
           { label: '공지', href: '/notices', badge: unreadCount, color: 'var(--accent-blue)' },
@@ -223,15 +186,9 @@ export default function HomePage() {
           { label: '행사', href: '/events', badge: 0, color: 'var(--accent-green)' },
           { label: '동문', href: '/members', badge: 0, color: 'var(--accent-orange)' },
         ].map(item => (
-          <a
-            key={item.label}
-            href={item.href}
+          <a key={item.label} href={item.href}
             className="relative flex flex-col items-center gap-2 py-4 rounded-2xl card-hover btn-press"
-            style={{
-              background: 'var(--bg-card)',
-              border: '0.5px solid var(--border-primary)',
-            }}
-          >
+            style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
             {item.badge > 0 && (
               <span className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white"
                 style={{ background: '#E24B4A' }}>

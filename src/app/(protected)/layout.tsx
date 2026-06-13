@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Header from '@/components/Header'
+import { ProfileProvider } from '@/contexts/ProfileContext'
 
 export default function ProtectedLayout({
   children,
@@ -19,17 +20,19 @@ export default function ProtectedLayout({
   }, [pathname])
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
-      <Header />
-      <div
-        style={{
-          opacity: visible ? 1 : 0,
-          transform: visible ? 'translateY(0)' : 'translateY(8px)',
-          transition: 'opacity 0.25s ease, transform 0.25s ease',
-        }}
-      >
-        {children}
+    <ProfileProvider>
+      <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
+        <Header />
+        <div
+          style={{
+            opacity: visible ? 1 : 0,
+            transform: visible ? 'translateY(0)' : 'translateY(8px)',
+            transition: 'opacity 0.25s ease, transform 0.25s ease',
+          }}
+        >
+          {children}
+        </div>
       </div>
-    </div>
+    </ProfileProvider>
   )
 }

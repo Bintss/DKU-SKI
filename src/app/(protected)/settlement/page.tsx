@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
 import { SkeletonList } from '@/components/Skeleton'
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Settlement = {
   id: string
@@ -26,36 +26,30 @@ type SettlementItem = {
 }
 
 export default function SettlementPage() {
+  const { profile, loading: profileLoading } = useProfile()
   const [settlements, setSettlements] = useState<Settlement[]>([])
   const [myItems, setMyItems] = useState<SettlementItem[]>([])
-  const [profile, setProfile] = useState<{ id: string; role: string } | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'all' | 'mine'>('mine')
-  const router = useRouter()
+  const [tab, setTab] = useState<'mine' | 'all'>('mine')
   const supabase = createClient()
 
   useEffect(() => {
+    if (!profile) return
     const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
-      const [{ data: profileData }, { data: settlementData }, { data: itemData }] =
-        await Promise.all([
-          supabase.from('profiles').select('id, role').eq('id', user.id).single(),
-          supabase.from('settlements')
-            .select('*, profiles(name)')
-            .order('created_at', { ascending: false }),
-          supabase.from('settlement_items')
-            .select('*').eq('user_id', user.id),
-        ])
-
-      setProfile(profileData)
+      const [{ data: settlementData }, { data: itemData }] = await Promise.all([
+        supabase.from('settlements')
+          .select('*, profiles(name)')
+          .order('created_at', { ascending: false }),
+        supabase.from('settlement_items')
+          .select('*')
+          .eq('user_id', profile.id),
+      ])
       setSettlements(settlementData ?? [])
       setMyItems(itemData ?? [])
       setLoading(false)
     }
     fetchData()
-  }, [])
+  }, [profile])
 
   const getMyItem = (settlementId: string) =>
     myItems.find(i => i.settlement_id === settlementId)
@@ -73,11 +67,10 @@ export default function SettlementPage() {
   const mySettlements = settlements.filter(s => getMyItem(s.id))
   const displaySettlements = tab === 'mine' ? mySettlements : settlements
 
-  const totalUnpaid = myItems
-    .filter(i => !i.is_paid)
-    .reduce((sum, i) => sum + i.amount, 0)
+  const unpaidItems = myItems.filter(i => !i.is_paid)
+  const totalUnpaid = unpaidItems.reduce((sum, i) => sum + i.amount, 0)
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="h-8 rounded-full w-24 mb-5 animate-pulse"
         style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -113,7 +106,7 @@ export default function SettlementPage() {
             {totalUnpaid.toLocaleString()}원
           </p>
           <p className="text-xs mt-1" style={{ color: 'rgba(240,149,149,0.6)' }}>
-            미납된 정산이 {myItems.filter(i => !i.is_paid).length}건 있어요
+            미납된 정산이 {unpaidItems.length}건 있어요
           </p>
         </div>
       )}
@@ -125,7 +118,7 @@ export default function SettlementPage() {
           { value: 'mine', label: '내 정산' },
           { value: 'all', label: '전체' },
         ].map(t => (
-          <button key={t.value} onClick={() => setTab(t.value as 'all' | 'mine')}
+          <button key={t.value} onClick={() => setTab(t.value as 'mine' | 'all')}
             className="pb-3 text-sm font-black transition-colors relative"
             style={{ color: tab === t.value ? 'var(--text-primary)' : 'var(--text-hint)' }}>
             {t.label}
@@ -158,7 +151,8 @@ export default function SettlementPage() {
                 className="block rounded-2xl p-5 card-hover btn-press"
                 style={{
                   background: 'var(--bg-card)',
-                  border: `0.5px solid ${!isPaid && myItem ? 'rgba(240,149,149,0.3)' : 'var(--border-primary)'}`,
+                  border: `0.5px solid ${!isPaid && myItem
+                    ? 'rgba(240,149,149,0.3)' : 'var(--border-primary)'}`,
                 }}>
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -171,7 +165,8 @@ export default function SettlementPage() {
                     {myItem && (
                       <span className="text-xs font-black px-2 py-0.5 rounded-full"
                         style={{
-                          background: isPaid ? 'rgba(46,204,113,0.15)' : 'rgba(240,149,149,0.15)',
+                          background: isPaid
+                            ? 'rgba(46,204,113,0.15)' : 'rgba(240,149,149,0.15)',
                           color: isPaid ? 'var(--accent-green)' : '#F09595',
                         }}>
                         {isPaid ? '납부완료' : '미납'}
@@ -216,7 +211,8 @@ export default function SettlementPage() {
                         color: new Date(s.due_date) < new Date()
                           ? '#F09595' : 'var(--text-hint)',
                       }}>
-                      {new Date(s.due_date) < new Date() ? '기한 초과' : `~${s.due_date.slice(5)}`}
+                      {new Date(s.due_date) < new Date()
+                        ? '기한 초과' : `~${s.due_date.slice(5)}`}
                     </span>
                   )}
                 </div>

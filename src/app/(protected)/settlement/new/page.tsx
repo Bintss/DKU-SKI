@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 
-type Profile = {
+type Member = {
   id: string
   name: string
   generation: number
@@ -12,18 +13,18 @@ type Profile = {
 }
 
 export default function NewSettlementPage() {
+  const { profile } = useProfile()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [totalAmount, setTotalAmount] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [members, setMembers] = useState<Profile[]>([])
+  const [members, setMembers] = useState<Member[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [splitEqual, setSplitEqual] = useState(true)
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [myProfile, setMyProfile] = useState<Profile | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -34,23 +35,16 @@ export default function NewSettlementPage() {
   }
 
   useEffect(() => {
-    const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
-      const [{ data: profileData }, { data: memberData }] = await Promise.all([
-        supabase.from('profiles').select('id, name, generation, role').eq('id', user.id).single(),
-        supabase.from('profiles')
-          .select('id, name, generation, role')
-          .neq('role', 'pending')
-          .order('generation', { ascending: false }),
-      ])
-
-      setMyProfile(profileData)
-      setMembers(memberData ?? [])
+    const fetchMembers = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, name, generation, role')
+        .neq('role', 'pending')
+        .order('generation', { ascending: false })
+      setMembers(data ?? [])
       setLoading(false)
     }
-    fetchData()
+    fetchMembers()
   }, [])
 
   const toggleMember = (id: string) => {
@@ -59,32 +53,40 @@ export default function NewSettlementPage() {
     )
   }
 
-  const selectAll = () => {
-    if (selectedIds.length === members.length) {
-      setSelectedIds([])
-    } else {
-      setSelectedIds(members.map(m => m.id))
-    }
+  const isAllSelected = members.length > 0 && selectedIds.length === members.length
+
+  const toggleAll = () => {
+    setSelectedIds(isAllSelected ? [] : members.map(m => m.id))
   }
 
-  const amountPerPerson = selectedIds.length > 0 && totalAmount
-    ? Math.ceil(parseInt(totalAmount) / selectedIds.length)
+  const total = parseInt(totalAmount) || 0
+  const amountPerPerson = selectedIds.length > 0 && total
+    ? Math.floor(total / selectedIds.length)
     : 0
+  const remainder = selectedIds.length > 0 && total
+    ? total % selectedIds.length
+    : 0
+
+  // 개별 금액 합계
+  const customTotal = Object.values(customAmounts)
+    .filter(v => v !== '')
+    .reduce((sum, v) => sum + (parseInt(v) || 0), 0)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!profile) return
     if (selectedIds.length === 0) { setError('정산 대상을 선택해주세요'); return }
-    if (!totalAmount) { setError('총 금액을 입력해주세요'); return }
+    if (!total) { setError('총 금액을 입력해주세요'); return }
+
+    if (!splitEqual) {
+      if (customTotal !== total) {
+        setError(`개별 금액 합계(${customTotal.toLocaleString()}원)가 총액(${total.toLocaleString()}원)과 달라요`)
+        return
+      }
+    }
+
     setSubmitting(true)
     setError('')
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
-
-    const total = parseInt(totalAmount)
-    const perPerson = splitEqual
-      ? Math.ceil(total / selectedIds.length)
-      : 0
 
     const { data: settlement, error: sErr } = await supabase
       .from('settlements')
@@ -92,23 +94,25 @@ export default function NewSettlementPage() {
         title,
         description: description || null,
         total_amount: total,
-        amount_per_person: perPerson,
+        amount_per_person: splitEqual ? Math.ceil(total / selectedIds.length) : 0,
         due_date: dueDate || null,
-        created_by: user.id,
+        created_by: profile.id,
       })
       .select()
       .single()
 
     if (sErr) { setError(sErr.message); setSubmitting(false); return }
 
-    const items = selectedIds.map(uid => ({
-      settlement_id: settlement.id,
-      user_id: uid,
-      amount: splitEqual
-        ? Math.ceil(total / selectedIds.length)
-        : parseInt(customAmounts[uid] || '0'),
-      is_paid: false,
-    }))
+    const items = selectedIds.map((uid, index) => {
+      let amount: number
+      if (splitEqual) {
+        const base = Math.floor(total / selectedIds.length)
+        amount = index < remainder ? base + 1 : base
+      } else {
+        amount = parseInt(customAmounts[uid] || '0')
+      }
+      return { settlement_id: settlement.id, user_id: uid, amount, is_paid: false }
+    })
 
     await supabase.from('settlement_items').insert(items)
     router.push('/settlement')
@@ -129,7 +133,7 @@ export default function NewSettlementPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {/* 제목 */}
+        {/* 정산명 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>정산명</label>
@@ -192,32 +196,71 @@ export default function NewSettlementPage() {
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-black tracking-widest uppercase"
               style={{ color: 'var(--text-hint)' }}>
-              정산 대상 ({selectedIds.length}명 선택)
+              정산 대상
+              <span className="ml-1.5 font-black" style={{ color: 'var(--text-tertiary)' }}>
+                {selectedIds.length}명 선택
+              </span>
             </label>
-            <button type="button" onClick={selectAll}
+            <button type="button" onClick={toggleAll}
               className="text-xs font-black btn-press"
               style={{ color: 'var(--accent-blue)' }}>
-              {selectedIds.length === members.length ? '전체 해제' : '전체 선택'}
+              {isAllSelected ? '전체 해제' : '전체 선택'}
             </button>
           </div>
 
           {/* 1/N 미리보기 */}
-          {splitEqual && totalAmount && selectedIds.length > 0 && (
+          {splitEqual && total > 0 && selectedIds.length > 0 && (
             <div className="rounded-xl px-4 py-3 mb-3 flex items-center justify-between"
               style={{ background: 'rgba(27,63,171,0.15)', border: '0.5px solid rgba(27,63,171,0.3)' }}>
               <span className="text-xs font-black" style={{ color: 'var(--text-hint)' }}>
                 1인당 금액
               </span>
-              <span className="text-base font-black" style={{ color: 'var(--accent-blue)' }}>
-                {amountPerPerson.toLocaleString()}원
+              <div className="text-right">
+                <span className="text-base font-black" style={{ color: 'var(--accent-blue)' }}>
+                  {amountPerPerson.toLocaleString()}원
+                </span>
+                {remainder > 0 && (
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                    * {remainder}명은 {(amountPerPerson + 1).toLocaleString()}원 (최대 1원 차이)
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 개별 금액 합계 표시 */}
+          {!splitEqual && selectedIds.length > 0 && (
+            <div className="rounded-xl px-4 py-3 mb-3 flex items-center justify-between"
+              style={{
+                background: customTotal === total && total > 0
+                  ? 'rgba(46,204,113,0.1)' : 'rgba(255,255,255,0.04)',
+                border: `0.5px solid ${customTotal === total && total > 0
+                  ? 'rgba(46,204,113,0.3)' : 'var(--border-primary)'}`,
+              }}>
+              <span className="text-xs font-black" style={{ color: 'var(--text-hint)' }}>
+                입력 합계
+              </span>
+              <span className="text-base font-black"
+                style={{
+                  color: customTotal === total && total > 0
+                    ? 'var(--accent-green)'
+                    : total > 0 ? '#F09595' : 'var(--text-tertiary)',
+                }}>
+                {customTotal.toLocaleString()}원
+                {total > 0 && customTotal !== total && (
+                  <span className="text-xs ml-1.5 font-normal">
+                    / {total.toLocaleString()}원
+                  </span>
+                )}
               </span>
             </div>
           )}
 
+          {/* 부원 목록 */}
           <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
             {members.map(m => {
               const isSelected = selectedIds.includes(m.id)
-              const isMe = m.id === myProfile?.id
+              const isMe = m.id === profile?.id
               return (
                 <div key={m.id}
                   className="flex items-center gap-3 rounded-xl px-4 py-3 cursor-pointer btn-press"
@@ -232,9 +275,12 @@ export default function NewSettlementPage() {
                       background: isSelected ? 'var(--ski-blue)' : 'rgba(255,255,255,0.06)',
                       border: `0.5px solid ${isSelected ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
                     }}>
-                    {isSelected && <span className="text-white text-xs font-black">✓</span>}
+                    {isSelected && (
+                      <span className="text-white text-xs font-black">✓</span>
+                    )}
                   </div>
-                  <div className="flex-1">
+
+                  <div className="flex-1 min-w-0">
                     <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
                       {m.name}
                     </span>
@@ -246,19 +292,27 @@ export default function NewSettlementPage() {
                       {m.generation}기
                     </span>
                   </div>
+
                   {/* 개별 금액 입력 */}
                   {!splitEqual && isSelected && (
                     <input type="number" placeholder="금액"
                       value={customAmounts[m.id] ?? ''}
-                      onChange={e => setCustomAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
+                      onChange={e => setCustomAmounts(prev => ({
+                        ...prev, [m.id]: e.target.value
+                      }))}
                       onClick={e => e.stopPropagation()}
                       className="w-24 rounded-lg px-2 py-1.5 text-xs text-right"
                       style={inputStyle} />
                   )}
-                  {splitEqual && isSelected && totalAmount && (
+
+                  {/* 1/N 금액 표시 */}
+                  {splitEqual && isSelected && total > 0 && (
                     <span className="text-xs font-black flex-shrink-0"
                       style={{ color: 'var(--accent-blue)' }}>
-                      {amountPerPerson.toLocaleString()}원
+                      {(selectedIds.indexOf(m.id) < remainder
+                        ? amountPerPerson + 1
+                        : amountPerPerson
+                      ).toLocaleString()}원
                     </span>
                   )}
                 </div>
@@ -267,9 +321,11 @@ export default function NewSettlementPage() {
           </div>
         </div>
 
-        {error && <p className="text-xs" style={{ color: 'var(--accent-red)' }}>{error}</p>}
+        {error && (
+          <p className="text-xs" style={{ color: 'var(--accent-red)' }}>{error}</p>
+        )}
 
-        <button type="submit" disabled={submitting}
+        <button type="submit" disabled={submitting || !profile}
           className="w-full text-white rounded-xl py-3.5 text-sm font-black disabled:opacity-50 btn-press"
           style={{ background: 'var(--ski-blue)' }}>
           {submitting ? '등록 중...' : '정산 요청하기'}

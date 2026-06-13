@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 import ImageUpload from '@/components/ImageUpload'
 
 export default function EditEventPage() {
   const { id } = useParams()
   const router = useRouter()
+  const { profile, loading: profileLoading } = useProfile()
   const supabase = createClient()
 
   const [title, setTitle] = useState('')
@@ -40,13 +42,20 @@ export default function EditEventPage() {
   ]
 
   useEffect(() => {
+    if (!profile) return
+    if (profile.role !== 'admin') { router.push('/events'); return }
+
     const fetchEvent = async () => {
       const { data } = await supabase.from('events').select('*').eq('id', id).single()
       if (data) {
-        setTitle(data.title); setType(data.type)
-        setStartDate(data.start_date); setEndDate(data.end_date)
-        setLocation(data.location ?? ''); setDescription(data.description ?? '')
-        setDetail(data.detail ?? ''); setImageUrl(data.image_url ?? '')
+        setTitle(data.title)
+        setType(data.type)
+        setStartDate(data.start_date)
+        setEndDate(data.end_date)
+        setLocation(data.location ?? '')
+        setDescription(data.description ?? '')
+        setDetail(data.detail ?? '')
+        setImageUrl(data.image_url ?? '')
         setMaxParticipants(data.max_participants ? String(data.max_participants) : '')
         setGuestFee(String(data.guest_fee))
         setDeadline(data.deadline ? new Date(data.deadline).toISOString().slice(0, 16) : '')
@@ -55,16 +64,21 @@ export default function EditEventPage() {
       setLoading(false)
     }
     fetchEvent()
-  }, [id])
+  }, [profile, id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSubmitting(true); setError('')
+    setSubmitting(true)
+    setError('')
 
     const { error } = await supabase.from('events').update({
-      title, type, start_date: startDate, end_date: endDate,
-      location: location || null, description: description || null,
-      detail: detail || null, image_url: imageUrl || null,
+      title, type,
+      start_date: startDate,
+      end_date: endDate,
+      location: location || null,
+      description: description || null,
+      detail: detail || null,
+      image_url: imageUrl || null,
       max_participants: maxParticipants ? parseInt(maxParticipants) : null,
       guest_fee: parseInt(guestFee),
       deadline: deadline ? new Date(deadline).toISOString() : null,
@@ -81,7 +95,7 @@ export default function EditEventPage() {
     router.push('/events')
   }
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
@@ -102,7 +116,6 @@ export default function EditEventPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {/* 행사 유형 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-2 block"
             style={{ color: 'var(--text-hint)' }}>행사 유형</label>
@@ -174,7 +187,8 @@ export default function EditEventPage() {
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>신청 마감일</label>
-          <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)}
+          <input type="datetime-local" value={deadline}
+            onChange={e => setDeadline(e.target.value)}
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
         </div>
 

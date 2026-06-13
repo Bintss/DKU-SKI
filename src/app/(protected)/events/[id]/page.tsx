@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Event = {
   id: string
@@ -41,11 +42,11 @@ const TYPE_COLOR: Record<string, string> = {
 export default function EventDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const { profile, loading: profileLoading } = useProfile()
   const supabase = createClient()
 
   const [event, setEvent] = useState<Event | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
-  const [profile, setProfile] = useState<{ role: string; id: string } | null>(null)
   const [myParticipation, setMyParticipation] = useState<Participant | null>(null)
   const [loading, setLoading] = useState(true)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -54,36 +55,33 @@ export default function EventDetailPage() {
   const [applyMode, setApplyMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    const fetch = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+  const fetchData = async () => {
+    if (!profile) return
 
-      const [{ data: eventData }, { data: profileData }, { data: participantData }] =
-        await Promise.all([
-          supabase.from('events').select('*').eq('id', id).single(),
-          supabase.from('profiles').select('id, role').eq('id', user.id).single(),
-          supabase.from('event_participants')
-            .select('*, profiles(name, generation)').eq('event_id', id),
-        ])
+    const [{ data: eventData }, { data: participantData }] = await Promise.all([
+      supabase.from('events').select('*').eq('id', id).single(),
+      supabase.from('event_participants')
+        .select('*, profiles(name, generation)').eq('event_id', id),
+    ])
 
-      setEvent(eventData)
-      setProfile(profileData)
-      setParticipants(participantData ?? [])
+    setEvent(eventData)
+    setParticipants(participantData ?? [])
 
-      const mine = participantData?.find(p => p.user_id === user.id)
-      setMyParticipation(mine ?? null)
-      if (mine) {
-        setJoinDate(mine.join_date)
-        setLeaveDate(mine.leave_date)
-      } else if (eventData) {
-        setJoinDate(eventData.start_date)
-        setLeaveDate(eventData.end_date)
-      }
-      setLoading(false)
+    const mine = participantData?.find(p => p.user_id === profile.id)
+    setMyParticipation(mine ?? null)
+    if (mine) {
+      setJoinDate(mine.join_date)
+      setLeaveDate(mine.leave_date)
+    } else if (eventData) {
+      setJoinDate(eventData.start_date)
+      setLeaveDate(eventData.end_date)
     }
-    fetch()
-  }, [id])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    if (profile) fetchData()
+  }, [profile, id])
 
   const handleApply = async () => {
     if (!event || !profile) return
@@ -105,13 +103,13 @@ export default function EventDetailPage() {
     }
     setApplyMode(false)
     setSubmitting(false)
-    window.location.reload()
+    fetchData()
   }
 
   const handleCancel = async () => {
     if (!myParticipation) return
     await supabase.from('event_participants').delete().eq('id', myParticipation.id)
-    window.location.reload()
+    fetchData()
   }
 
   const formatDate = (dateStr: string) =>
@@ -119,7 +117,7 @@ export default function EventDetailPage() {
       month: 'long', day: 'numeric', weekday: 'short'
     })
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
@@ -182,13 +180,17 @@ export default function EventDetailPage() {
           <div className="w-1 rounded-full flex-shrink-0" style={{ background: typeColor }} />
           <div className="flex flex-col gap-1.5">
             {[
-              { label: '날짜', value: event.start_date === event.end_date
-                ? formatDate(event.start_date)
-                : `${formatDate(event.start_date)} — ${formatDate(event.end_date)}` },
+              {
+                label: '날짜', value: event.start_date === event.end_date
+                  ? formatDate(event.start_date)
+                  : `${formatDate(event.start_date)} — ${formatDate(event.end_date)}`
+              },
               event.location ? { label: '장소', value: event.location } : null,
-              event.deadline ? { label: '마감', value: new Date(event.deadline).toLocaleDateString('ko-KR', {
-                month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-              }) } : null,
+              event.deadline ? {
+                label: '마감', value: new Date(event.deadline).toLocaleDateString('ko-KR', {
+                  month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                })
+              } : null,
             ].filter(Boolean).map((item: any) => (
               <div key={item.label} className="flex items-center gap-2">
                 <span className="text-xs font-black w-10" style={{ color: 'var(--text-hint)' }}>
@@ -204,20 +206,17 @@ export default function EventDetailPage() {
       </div>
 
       <div className="px-4">
-        {/* 이미지 */}
         {event.image_url && (
           <img src={event.image_url} alt={event.title}
             className="w-full h-52 object-cover rounded-2xl mb-4" />
         )}
 
-        {/* 설명 */}
         {event.description && (
           <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--text-secondary)' }}>
             {event.description}
           </p>
         )}
 
-        {/* 세부 내용 토글 */}
         {event.detail && (
           <div className="rounded-2xl overflow-hidden mb-4"
             style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
@@ -370,7 +369,7 @@ export default function EventDetailPage() {
                   style={{ background: 'rgba(255,255,255,0.04)' }}>
                   <div className="flex items-center gap-2.5">
                     <div className="w-7 h-7 rounded-full text-white text-xs font-black flex items-center justify-center"
-                      style={{ background: 'var(--ski-blue)' }}>
+                      style={{ background: p.user_id === profile?.id ? 'var(--accent-green)' : 'var(--ski-blue)' }}>
                       {p.profiles?.name?.[0] ?? '?'}
                     </div>
                     <div>

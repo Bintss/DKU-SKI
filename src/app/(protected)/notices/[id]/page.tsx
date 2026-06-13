@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Notice = {
   id: string
@@ -20,34 +21,32 @@ type Notice = {
 export default function NoticeDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const { profile, loading: profileLoading } = useProfile()
   const supabase = createClient()
 
   const [notice, setNotice] = useState<Notice | null>(null)
-  const [profile, setProfile] = useState<{ id: string; role: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!profile) return
     const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
-      const [{ data: noticeData }, { data: profileData }] = await Promise.all([
-        supabase.from('notices').select('*, profiles(name)').eq('id', id).single(),
-        supabase.from('profiles').select('id, role').eq('id', user.id).single(),
-      ])
+      const { data: noticeData } = await supabase
+        .from('notices')
+        .select('*, profiles(name)')
+        .eq('id', id)
+        .single()
 
       setNotice(noticeData)
-      setProfile(profileData)
-
-      await supabase.from('notice_reads').upsert({
-        notice_id: id as string,
-        user_id: user.id,
-      }, { onConflict: 'notice_id,user_id' })
-
       setLoading(false)
+
+      // 읽음 처리 — 백그라운드에서 실행 (UI 블로킹 없음)
+      supabase.from('notice_reads').upsert({
+        notice_id: id as string,
+        user_id: profile.id,
+      }, { onConflict: 'notice_id,user_id' })
     }
     fetchData()
-  }, [id])
+  }, [profile, id])
 
   const handleDelete = async () => {
     if (!confirm('공지사항을 삭제할까요?')) return
@@ -55,9 +54,8 @@ export default function NoticeDetailPage() {
     router.push('/notices')
   }
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center"
-      style={{ background: 'var(--bg-primary)' }}>
+  if (profileLoading || loading) return (
+    <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
   )
@@ -86,16 +84,13 @@ export default function NoticeDetailPage() {
       )}
 
       <div className="rounded-2xl p-5 mb-4"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
-      >
-        <div className="flex items-center gap-2 mb-3">
-          {notice.is_pinned && (
-            <span className="text-xs font-black px-2 py-0.5 rounded-full"
-              style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
-              고정
-            </span>
-          )}
-        </div>
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+        {notice.is_pinned && (
+          <span className="text-xs font-black px-2 py-0.5 rounded-full mb-3 inline-block"
+            style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
+            고정
+          </span>
+        )}
 
         <h1 className="text-xl font-black mb-3" style={{ color: 'var(--text-primary)' }}>
           {notice.title}
@@ -129,16 +124,19 @@ export default function NoticeDetailPage() {
             style={{
               background: 'rgba(255,255,255,0.04)',
               border: '0.5px solid var(--border-primary)',
-            }}
-          >
-            <i className="ti ti-paperclip" style={{ fontSize: 18, color: 'var(--text-tertiary)' }} aria-hidden="true" />
+            }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(27,63,171,0.2)' }}>
+              <span className="text-sm" style={{ color: 'var(--accent-blue)' }}>📎</span>
+            </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-secondary)' }}>
                 {notice.file_name ?? '첨부파일'}
               </p>
               <p className="text-xs" style={{ color: 'var(--text-hint)' }}>클릭하여 다운로드</p>
             </div>
-            <i className="ti ti-download" style={{ fontSize: 16, color: 'var(--text-hint)' }} aria-hidden="true" />
+            <span className="text-xs font-black flex-shrink-0"
+              style={{ color: 'var(--text-hint)' }}>↓</span>
           </a>
         )}
       </div>

@@ -4,11 +4,13 @@ import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import { useProfile } from '@/contexts/ProfileContext'
 
 function NewPostForm() {
   const searchParams = useSearchParams()
   const initialChannel = searchParams.get('channel') ?? 'free'
 
+  const { profile } = useProfile()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [channel, setChannel] = useState(initialChannel)
@@ -32,7 +34,8 @@ function NewPostForm() {
     if (!file) return
     setImageUploading(true)
     const fileName = `${Date.now()}.${file.name.split('.').pop()}`
-    await supabase.storage.from('posts').upload(fileName, file)
+    const { error } = await supabase.storage.from('posts').upload(fileName, file)
+    if (error) { setError('이미지 업로드에 실패했어요'); setImageUploading(false); return }
     const { data } = supabase.storage.from('posts').getPublicUrl(fileName)
     setImageUrl(data.publicUrl)
     setImageUploading(false)
@@ -40,23 +43,18 @@ function NewPostForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!profile) return
     setSubmitting(true)
     setError('')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
-
-    const { data: profileData } = await supabase
-      .from('profiles').select('role, join_type').eq('id', user.id).single()
-
-    const isAdmin = profileData?.role === 'admin'
-    if (!isAdmin) {
-      if (channel === 'student' && profileData?.join_type !== 'student') {
+    // 채널 접근 권한 체크
+    if (profile.role !== 'admin') {
+      if (channel === 'student' && profile.join_type !== 'student') {
         setError('재학생만 작성할 수 있어요')
         setSubmitting(false)
         return
       }
-      if (channel === 'ob' && profileData?.join_type !== 'ob') {
+      if (channel === 'ob' && profile.join_type !== 'ob') {
         setError('OB만 작성할 수 있어요')
         setSubmitting(false)
         return
@@ -64,8 +62,10 @@ function NewPostForm() {
     }
 
     const { error } = await supabase.from('posts').insert({
-      title, content, channel, is_anonymous: isAnonymous,
-      image_url: imageUrl || null, author_id: user.id,
+      title, content, channel,
+      is_anonymous: isAnonymous,
+      image_url: imageUrl || null,
+      author_id: profile.id,
     })
 
     if (error) { setError(error.message); setSubmitting(false); return }
@@ -106,20 +106,23 @@ function NewPostForm() {
           </div>
         </div>
 
+        {/* 제목 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>제목</label>
-          <input type="text" placeholder="제목을 입력해주세요" value={title}
-            onChange={e => setTitle(e.target.value)}
+          <input type="text" placeholder="제목을 입력해주세요"
+            value={title} onChange={e => setTitle(e.target.value)}
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
         </div>
 
+        {/* 내용 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>내용</label>
-          <textarea placeholder="내용을 입력해주세요" value={content}
-            onChange={e => setContent(e.target.value)} rows={8}
-            className="w-full rounded-xl px-4 py-3 text-sm resize-none" style={inputStyle} required />
+          <textarea placeholder="내용을 입력해주세요"
+            value={content} onChange={e => setContent(e.target.value)} rows={8}
+            className="w-full rounded-xl px-4 py-3 text-sm resize-none"
+            style={inputStyle} required />
         </div>
 
         {/* 이미지 */}
@@ -131,7 +134,9 @@ function NewPostForm() {
               <img src={imageUrl} alt="미리보기" className="w-full h-48 object-cover rounded-xl" />
               <button type="button" onClick={() => setImageUrl('')}
                 className="absolute top-2 right-2 text-xs font-black px-2.5 py-1.5 rounded-lg btn-press"
-                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>삭제</button>
+                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                삭제
+              </button>
             </div>
           ) : (
             <button type="button" onClick={() => imageInputRef.current?.click()}
@@ -142,7 +147,7 @@ function NewPostForm() {
                 <p className="text-sm" style={{ color: 'var(--text-hint)' }}>업로드 중...</p>
               ) : (
                 <>
-                  <i className="ti ti-photo" style={{ fontSize: 24, color: 'var(--text-hint)' }} aria-hidden="true" />
+                  <span className="text-2xl">📷</span>
                   <p className="text-sm" style={{ color: 'var(--text-hint)' }}>사진 추가</p>
                 </>
               )}
@@ -156,7 +161,9 @@ function NewPostForm() {
         <div className="flex items-center justify-between rounded-xl px-4 py-3"
           style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
           <div>
-            <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>익명으로 작성</p>
+            <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+              익명으로 작성
+            </p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
               운영진에게는 작성자가 표시돼요
             </p>
@@ -171,7 +178,7 @@ function NewPostForm() {
 
         {error && <p className="text-xs" style={{ color: 'var(--accent-red)' }}>{error}</p>}
 
-        <button type="submit" disabled={submitting}
+        <button type="submit" disabled={submitting || !profile}
           className="w-full text-white rounded-xl py-3.5 text-sm font-black disabled:opacity-50 btn-press"
           style={{ background: 'var(--ski-blue)' }}>
           {submitting ? '등록 중...' : '게시하기'}

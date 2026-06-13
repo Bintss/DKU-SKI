@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 
 export default function NewCampPage() {
+  const { profile } = useProfile()
   const [title, setTitle] = useState('')
   const [season, setSeason] = useState('2026-27')
   const [startDate, setStartDate] = useState('')
@@ -27,20 +29,21 @@ export default function NewCampPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!profile) return
     setLoading(true)
     setError('')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
-
     const { error } = await supabase.from('camps').insert({
       title, season,
-      start_date: startDate, end_date: endDate,
-      location: location || null, description: description || null,
+      start_date: startDate,
+      end_date: endDate,
+      location: location || null,
+      description: description || null,
       max_participants: maxParticipants ? parseInt(maxParticipants) : null,
       guest_fee: parseInt(guestFee),
       deadline: deadline ? new Date(deadline).toISOString() : null,
-      is_open: true, created_by: user.id,
+      is_open: true,
+      created_by: profile.id,
     })
 
     if (error) { setError(error.message); setLoading(false); return }
@@ -56,26 +59,36 @@ export default function NewCampPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {[
-          { label: '시즌', value: season, onChange: setSeason, placeholder: '예: 2026-27', type: 'text' },
-          { label: '합숙명', value: title, onChange: setTitle, placeholder: '예: 2026-27 동계 전지훈련', type: 'text' },
-          { label: '장소', value: location, onChange: setLocation, placeholder: '예: 하이원 리조트', type: 'text' },
-        ].map(field => (
-          <div key={field.label}>
-            <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
-              style={{ color: 'var(--text-hint)' }}>{field.label}</label>
-            <input type={field.type} placeholder={field.placeholder} value={field.value}
-              onChange={e => field.onChange(e.target.value)}
-              className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle}
-              required={field.label !== '장소'} />
-          </div>
-        ))}
+        <div>
+          <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+            style={{ color: 'var(--text-hint)' }}>시즌</label>
+          <input type="text" placeholder="예: 2026-27"
+            value={season} onChange={e => setSeason(e.target.value)}
+            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
+        </div>
+
+        <div>
+          <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+            style={{ color: 'var(--text-hint)' }}>합숙명</label>
+          <input type="text" placeholder="예: 26-27 단국대 동계 합숙"
+            value={title} onChange={e => setTitle(e.target.value)}
+            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
+        </div>
+
+        <div>
+          <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+            style={{ color: 'var(--text-hint)' }}>장소</label>
+          <input type="text" placeholder="예: 하이원 리조트"
+            value={location} onChange={e => setLocation(e.target.value)}
+            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
               style={{ color: 'var(--text-hint)' }}>시작일</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+            <input type="date" value={startDate}
+              onChange={e => setStartDate(e.target.value)}
               className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
           </div>
           <div>
@@ -90,15 +103,16 @@ export default function NewCampPage() {
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>설명</label>
-          <textarea placeholder="합숙에 대한 간단한 설명" value={description}
-            onChange={e => setDescription(e.target.value)} rows={3}
+          <textarea placeholder="합숙에 대한 간단한 설명"
+            value={description} onChange={e => setDescription(e.target.value)} rows={3}
             className="w-full rounded-xl px-4 py-3 text-sm resize-none" style={inputStyle} />
         </div>
 
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>신청 마감일</label>
-          <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)}
+          <input type="datetime-local" value={deadline}
+            onChange={e => setDeadline(e.target.value)}
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
         </div>
 
@@ -106,21 +120,22 @@ export default function NewCampPage() {
           <div>
             <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
               style={{ color: 'var(--text-hint)' }}>최대 인원</label>
-            <input type="number" placeholder="없으면 비워두세요" value={maxParticipants}
-              onChange={e => setMaxParticipants(e.target.value)}
+            <input type="number" placeholder="없으면 비워두세요"
+              value={maxParticipants} onChange={e => setMaxParticipants(e.target.value)}
               className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
           </div>
           <div>
             <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
               style={{ color: 'var(--text-hint)' }}>게스트비 (원)</label>
-            <input type="number" value={guestFee} onChange={e => setGuestFee(e.target.value)}
+            <input type="number" value={guestFee}
+              onChange={e => setGuestFee(e.target.value)}
               className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
           </div>
         </div>
 
         {error && <p className="text-xs" style={{ color: 'var(--accent-red)' }}>{error}</p>}
 
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || !profile}
           className="w-full text-white rounded-xl py-3.5 text-sm font-black disabled:opacity-50 btn-press"
           style={{ background: 'var(--ski-blue)' }}>
           {loading ? '등록 중...' : '합숙 등록'}

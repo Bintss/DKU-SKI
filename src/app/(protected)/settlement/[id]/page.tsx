@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Settlement = {
   id: string
@@ -13,7 +14,12 @@ type Settlement = {
   created_at: string
   due_date: string | null
   created_by: string
-  profiles: { name: string; bank_name: string | null; account_number: string | null; account_holder: string | null } | null
+  profiles: {
+    name: string
+    bank_name: string | null
+    account_number: string | null
+    account_holder: string | null
+  } | null
 }
 
 type SettlementItem = {
@@ -22,42 +28,45 @@ type SettlementItem = {
   amount: number
   is_paid: boolean
   paid_at: string | null
-  profiles: { name: string; generation: number; bank_name: string | null; account_number: string | null } | null
+  profiles: {
+    name: string
+    generation: number
+    bank_name: string | null
+    account_number: string | null
+  } | null
 }
 
 export default function SettlementDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const { profile, loading: profileLoading } = useProfile()
   const supabase = createClient()
 
   const [settlement, setSettlement] = useState<Settlement | null>(null)
   const [items, setItems] = useState<SettlementItem[]>([])
-  const [profile, setProfile] = useState<{ id: string; role: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
+    if (!profile) return
 
-    const [{ data: settlementData }, { data: profileData }, { data: itemData }] =
-      await Promise.all([
-        supabase.from('settlements')
-          .select('*, profiles(name, bank_name, account_number, account_holder)')
-          .eq('id', id).single(),
-        supabase.from('profiles').select('id, role').eq('id', user.id).single(),
-        supabase.from('settlement_items')
-          .select('*, profiles(name, generation, bank_name, account_number)')
-          .eq('settlement_id', id)
-          .order('is_paid'),
-      ])
+    const [{ data: settlementData }, { data: itemData }] = await Promise.all([
+      supabase.from('settlements')
+        .select('*, profiles(name, bank_name, account_number, account_holder)')
+        .eq('id', id).single(),
+      supabase.from('settlement_items')
+        .select('*, profiles(name, generation, bank_name, account_number)')
+        .eq('settlement_id', id)
+        .order('is_paid'),
+    ])
 
     setSettlement(settlementData)
-    setProfile(profileData)
     setItems(itemData ?? [])
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [id])
+  useEffect(() => {
+    if (profile) fetchData()
+  }, [profile, id])
 
   const handleMarkPaid = async (itemId: string, current: boolean) => {
     await supabase.from('settlement_items').update({
@@ -73,15 +82,37 @@ export default function SettlementDetailPage() {
     router.push('/settlement')
   }
 
-  const openToss = (accountNumber: string, bankName: string, amount: number, name: string) => {
-    const tossUrl = `supertoss://send?bank=${encodeURIComponent(bankName)}&accountNo=${accountNumber}&amount=${amount}&origin=${encodeURIComponent(name)}`
-    window.location.href = tossUrl
+  const openToss = (
+    accountNumber: string,
+    bankName: string,
+    amount: number,
+    name: string
+  ) => {
+    // 토스 앱 딥링크 시도
+    const tossDeepLink = `supertoss://send?bank=${encodeURIComponent(bankName)}&accountNo=${accountNumber}&amount=${amount}&origin=${encodeURIComponent(name)}`
+    window.location.href = tossDeepLink
+
+    // 앱 미설치 시 1.5초 후 토스 웹으로 fallback
     setTimeout(() => {
-      window.open('https://toss.im', '_blank')
-    }, 1000)
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      const isAndroid = /Android/.test(navigator.userAgent)
+      if (isIOS) {
+        window.open('https://apps.apple.com/kr/app/toss/id839333328', '_blank')
+      } else if (isAndroid) {
+        window.open('https://play.google.com/store/apps/details?id=viva.republica.toss', '_blank')
+      } else {
+        window.open('https://toss.im', '_blank')
+      }
+    }, 1500)
   }
 
-  if (loading) return (
+  const copyAccount = (accountNumber: string) => {
+    navigator.clipboard.writeText(accountNumber)
+      .then(() => alert('계좌번호가 복사됐어요'))
+      .catch(() => alert(accountNumber))
+  }
+
+  if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
@@ -99,6 +130,7 @@ export default function SettlementDetailPage() {
   const paidCount = items.filter(i => i.is_paid).length
   const totalCount = items.length
   const collectedAmount = items.filter(i => i.is_paid).reduce((s, i) => s + i.amount, 0)
+  const progressPct = totalCount > 0 ? (paidCount / totalCount) * 100 : 0
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
@@ -113,7 +145,7 @@ export default function SettlementDetailPage() {
         )}
       </div>
 
-      {/* 정산 헤더 */}
+      {/* 정산 헤더 카드 */}
       <div className="rounded-2xl p-5 mb-4 relative overflow-hidden"
         style={{
           background: 'linear-gradient(135deg, #1B3FAB 0%, #2E55C8 100%)',
@@ -121,6 +153,7 @@ export default function SettlementDetailPage() {
         }}>
         <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
           style={{ background: 'white', transform: 'translate(30%,-30%)' }} />
+
         <p className="text-xs font-black tracking-widest uppercase mb-1"
           style={{ color: 'rgba(255,255,255,0.5)' }}>
           {settlement.profiles?.name} 요청
@@ -133,7 +166,8 @@ export default function SettlementDetailPage() {
             {settlement.description}
           </p>
         )}
-        <div className="flex items-end justify-between">
+
+        <div className="flex items-end justify-between mt-3">
           <div>
             <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>총 금액</p>
             <p className="text-2xl font-black" style={{ color: '#fff' }}>
@@ -147,14 +181,19 @@ export default function SettlementDetailPage() {
             </p>
           </div>
         </div>
+
+        {/* 진행률 바 */}
         <div className="mt-3 h-1.5 rounded-full overflow-hidden"
           style={{ background: 'rgba(255,255,255,0.15)' }}>
-          <div className="h-full rounded-full transition-all"
+          <div className="h-full rounded-full transition-all duration-500"
             style={{
-              width: `${totalCount > 0 ? (paidCount / totalCount) * 100 : 0}%`,
+              width: `${progressPct}%`,
               background: 'rgba(255,255,255,0.7)',
             }} />
         </div>
+        <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          {Math.round(progressPct)}% 수금 완료
+        </p>
       </div>
 
       {/* 내 정산 카드 */}
@@ -163,7 +202,8 @@ export default function SettlementDetailPage() {
           style={{
             background: myItem.is_paid
               ? 'rgba(46,204,113,0.1)' : 'rgba(240,149,149,0.1)',
-            border: `0.5px solid ${myItem.is_paid ? 'rgba(46,204,113,0.3)' : 'rgba(240,149,149,0.3)'}`,
+            border: `0.5px solid ${myItem.is_paid
+              ? 'rgba(46,204,113,0.3)' : 'rgba(240,149,149,0.3)'}`,
           }}>
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-black tracking-widest uppercase"
@@ -178,20 +218,25 @@ export default function SettlementDetailPage() {
               {myItem.is_paid ? '납부완료' : '미납'}
             </span>
           </div>
+
           <p className="text-3xl font-black mb-1"
             style={{ color: myItem.is_paid ? 'var(--accent-green)' : '#F09595' }}>
             {myItem.amount.toLocaleString()}원
           </p>
+
           {settlement.due_date && !myItem.is_paid && (
             <p className="text-xs mb-3" style={{ color: 'rgba(240,149,149,0.7)' }}>
               마감일: {settlement.due_date}
             </p>
           )}
 
-          {/* 송금 정보 */}
+          {/* 송금 계좌 정보 */}
           {!myItem.is_paid && settlement.profiles?.account_number && (
             <div className="rounded-xl p-3 mb-3"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '0.5px solid rgba(255,255,255,0.1)',
+              }}>
               <p className="text-xs font-black mb-1" style={{ color: 'var(--text-hint)' }}>
                 송금 계좌
               </p>
@@ -219,13 +264,10 @@ export default function SettlementDetailPage() {
             </button>
           )}
 
-          {/* 계좌 복사 버튼 */}
+          {/* 계좌번호 복사 */}
           {!myItem.is_paid && settlement.profiles?.account_number && (
             <button
-              onClick={() => {
-                navigator.clipboard.writeText(settlement.profiles!.account_number!)
-                alert('계좌번호가 복사됐어요')
-              }}
+              onClick={() => copyAccount(settlement.profiles!.account_number!)}
               className="w-full py-2.5 rounded-xl text-xs font-black btn-press"
               style={{
                 background: 'rgba(255,255,255,0.06)',
@@ -235,30 +277,59 @@ export default function SettlementDetailPage() {
               계좌번호 복사
             </button>
           )}
+
+          {/* 계좌 미등록 안내 */}
+          {!myItem.is_paid && !settlement.profiles?.account_number && (
+            <div className="rounded-xl p-3 text-center"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '0.5px solid var(--border-primary)',
+              }}>
+              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                요청자가 계좌 정보를 등록하지 않았어요
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                직접 연락해서 계좌를 확인해주세요
+              </p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* 전체 정산 현황 (요청자 또는 운영진) */}
+      {/* 전체 현황 */}
       <div className="rounded-2xl p-5"
         style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
         <h2 className="text-xs font-black tracking-widest uppercase mb-4"
           style={{ color: 'var(--text-hint)' }}>
-          전체 현황 ({paidCount}/{totalCount})
+          전체 현황
+          <span className="ml-2 font-black" style={{ color: 'var(--text-tertiary)' }}>
+            {paidCount}/{totalCount}
+          </span>
         </h2>
 
         <div className="flex flex-col gap-2">
           {items.map(item => (
-            <div key={item.id} className="flex items-center gap-3 rounded-xl px-3 py-3"
+            <div key={item.id}
+              className="flex items-center gap-3 rounded-xl px-3 py-3"
               style={{ background: 'rgba(255,255,255,0.03)' }}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
-                style={{ background: item.is_paid ? 'rgba(46,204,113,0.3)' : 'var(--ski-blue)' }}>
+                style={{
+                  background: item.user_id === profile?.id
+                    ? 'var(--accent-green)'
+                    : item.is_paid ? 'rgba(46,204,113,0.3)' : 'var(--ski-blue)',
+                }}>
                 {item.profiles?.name?.[0] ?? '?'}
               </div>
+
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
                     {item.profiles?.name}
                   </span>
+                  {item.user_id === profile?.id && (
+                    <span className="text-xs font-black"
+                      style={{ color: 'var(--accent-green)' }}>나</span>
+                  )}
                   <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
                     {item.profiles?.generation}기
                   </span>
@@ -268,20 +339,25 @@ export default function SettlementDetailPage() {
                   {item.amount.toLocaleString()}원
                 </span>
               </div>
+
+              {/* 운영진/요청자: 납부 처리 버튼 */}
               {(isCreator || isAdmin) ? (
                 <button onClick={() => handleMarkPaid(item.id, item.is_paid)}
                   className="text-xs font-black px-2.5 py-1.5 rounded-lg flex-shrink-0 btn-press"
                   style={{
-                    background: item.is_paid ? 'rgba(46,204,113,0.2)' : 'rgba(255,255,255,0.06)',
+                    background: item.is_paid
+                      ? 'rgba(46,204,113,0.2)' : 'rgba(255,255,255,0.06)',
                     color: item.is_paid ? 'var(--accent-green)' : 'var(--text-tertiary)',
-                    border: `0.5px solid ${item.is_paid ? 'rgba(46,204,113,0.3)' : 'var(--border-primary)'}`,
+                    border: `0.5px solid ${item.is_paid
+                      ? 'rgba(46,204,113,0.3)' : 'var(--border-primary)'}`,
                   }}>
                   {item.is_paid ? '납부완료' : '미납'}
                 </button>
               ) : (
                 <span className="text-xs font-black px-2.5 py-1.5 rounded-lg flex-shrink-0"
                   style={{
-                    background: item.is_paid ? 'rgba(46,204,113,0.15)' : 'rgba(255,255,255,0.04)',
+                    background: item.is_paid
+                      ? 'rgba(46,204,113,0.15)' : 'rgba(255,255,255,0.04)',
                     color: item.is_paid ? 'var(--accent-green)' : 'var(--text-hint)',
                   }}>
                   {item.is_paid ? '완료' : '미납'}

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { SkeletonNotice } from '@/components/Skeleton'
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Notice = {
   id: string
@@ -19,37 +20,32 @@ type Notice = {
 }
 
 export default function NoticesPage() {
+  const { profile, loading: profileLoading } = useProfile()
   const [notices, setNotices] = useState<Notice[]>([])
   const [unreadIds, setUnreadIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
-  const [profile, setProfile] = useState<{ role: string } | null>(null)
-  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
+    if (!profile) return
     const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+      const [{ data: noticeData }, { data: readData }] = await Promise.all([
+        supabase.from('notices')
+          .select('*, profiles(name)')
+          .order('is_pinned', { ascending: false })
+          .order('created_at', { ascending: false }),
+        supabase.from('notice_reads')
+          .select('notice_id')
+          .eq('user_id', profile.id),
+      ])
 
-      const [{ data: profileData }, { data: noticeData }, { data: readData }] =
-        await Promise.all([
-          supabase.from('profiles').select('role').eq('id', user.id).single(),
-          supabase.from('notices')
-            .select('*, profiles(name)')
-            .order('is_pinned', { ascending: false })
-            .order('created_at', { ascending: false }),
-          supabase.from('notice_reads').select('notice_id').eq('user_id', user.id),
-        ])
-
-      setProfile(profileData)
       setNotices(noticeData ?? [])
-
       const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
       setUnreadIds(new Set((noticeData ?? []).filter(n => !readSet.has(n.id)).map(n => n.id)))
       setLoading(false)
     }
     fetchData()
-  }, [])
+  }, [profile])
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -61,7 +57,7 @@ export default function NoticesPage() {
     return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
   }
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="h-8 rounded-full w-24 mb-5 animate-pulse"
         style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -88,9 +84,8 @@ export default function NoticesPage() {
 
       {notices.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-4xl font-black mb-2" style={{ color: 'rgba(255,255,255,0.05)' }}>
-            NO NOTICE
-          </p>
+          <p className="text-4xl font-black mb-2"
+            style={{ color: 'rgba(255,255,255,0.05)' }}>NO NOTICE</p>
           <p className="text-sm" style={{ color: 'var(--text-hint)' }}>등록된 공지사항이 없어요</p>
         </div>
       ) : (
@@ -103,8 +98,7 @@ export default function NoticesPage() {
                 style={{
                   background: isUnread ? 'rgba(27,63,171,0.12)' : 'var(--bg-card)',
                   border: `0.5px solid ${isUnread ? 'rgba(27,63,171,0.3)' : 'var(--border-primary)'}`,
-                }}
-              >
+                }}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">

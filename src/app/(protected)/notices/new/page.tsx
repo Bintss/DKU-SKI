@@ -3,8 +3,10 @@
 import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 
 export default function NewNoticePage() {
+  const { profile } = useProfile()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [isPinned, setIsPinned] = useState(false)
@@ -31,7 +33,8 @@ export default function NewNoticePage() {
     if (!file) return
     setImageUploading(true)
     const uploadName = `images/${Date.now()}.${file.name.split('.').pop()}`
-    await supabase.storage.from('notices').upload(uploadName, file)
+    const { error } = await supabase.storage.from('notices').upload(uploadName, file)
+    if (error) { setError('이미지 업로드에 실패했어요'); setImageUploading(false); return }
     const { data } = supabase.storage.from('notices').getPublicUrl(uploadName)
     setImageUrl(data.publicUrl)
     setImageUploading(false)
@@ -42,7 +45,8 @@ export default function NewNoticePage() {
     if (!file) return
     setFileUploading(true)
     const uploadName = `files/${Date.now()}_${file.name}`
-    await supabase.storage.from('notices').upload(uploadName, file)
+    const { error } = await supabase.storage.from('notices').upload(uploadName, file)
+    if (error) { setError('파일 업로드에 실패했어요'); setFileUploading(false); return }
     const { data } = supabase.storage.from('notices').getPublicUrl(uploadName)
     setFileUrl(data.publicUrl)
     setFileName(file.name)
@@ -51,18 +55,16 @@ export default function NewNoticePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!profile) return
     setSubmitting(true)
     setError('')
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
 
     const { error } = await supabase.from('notices').insert({
       title, content, is_pinned: isPinned,
       image_url: imageUrl || null,
       file_url: fileUrl || null,
       file_name: fileName || null,
-      author_id: user.id,
+      author_id: profile.id,
     })
 
     if (error) { setError(error.message); setSubmitting(false); return }
@@ -112,15 +114,12 @@ export default function NewNoticePage() {
             <button type="button" onClick={() => imageInputRef.current?.click()}
               disabled={imageUploading}
               className="w-full h-28 rounded-xl flex flex-col items-center justify-center gap-2 btn-press"
-              style={{
-                border: '1px dashed var(--border-secondary)',
-                background: 'var(--bg-card)',
-              }}>
+              style={{ border: '1px dashed var(--border-secondary)', background: 'var(--bg-card)' }}>
               {imageUploading ? (
                 <p className="text-sm" style={{ color: 'var(--text-hint)' }}>업로드 중...</p>
               ) : (
                 <>
-                  <i className="ti ti-photo" style={{ fontSize: 24, color: 'var(--text-hint)' }} aria-hidden="true" />
+                  <span className="text-2xl">📷</span>
                   <p className="text-sm" style={{ color: 'var(--text-hint)' }}>사진 추가</p>
                 </>
               )}
@@ -137,10 +136,14 @@ export default function NewNoticePage() {
           {fileUrl ? (
             <div className="flex items-center gap-3 p-3 rounded-xl"
               style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-              <i className="ti ti-paperclip" style={{ fontSize: 18, color: 'var(--text-tertiary)' }} aria-hidden="true" />
-              <p className="text-sm flex-1 truncate" style={{ color: 'var(--text-secondary)' }}>{fileName}</p>
+              <span className="text-lg">📎</span>
+              <p className="text-sm flex-1 truncate" style={{ color: 'var(--text-secondary)' }}>
+                {fileName}
+              </p>
               <button type="button" onClick={() => { setFileUrl(''); setFileName('') }}
-                className="text-xs font-black btn-press" style={{ color: '#FF6B6B' }}>삭제</button>
+                className="text-xs font-black btn-press" style={{ color: '#FF6B6B' }}>
+                삭제
+              </button>
             </div>
           ) : (
             <button type="button" onClick={() => fileInputRef.current?.click()}
@@ -151,7 +154,7 @@ export default function NewNoticePage() {
                 <p className="text-sm" style={{ color: 'var(--text-hint)' }}>업로드 중...</p>
               ) : (
                 <>
-                  <i className="ti ti-paperclip" style={{ fontSize: 18, color: 'var(--text-hint)' }} aria-hidden="true" />
+                  <span className="text-lg">📎</span>
                   <p className="text-sm" style={{ color: 'var(--text-hint)' }}>파일 첨부</p>
                 </>
               )}
@@ -163,9 +166,7 @@ export default function NewNoticePage() {
         {/* 상단 고정 */}
         <div className="flex items-center justify-between rounded-xl px-4 py-3"
           style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-          <div>
-            <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>상단 고정</p>
-          </div>
+          <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>상단 고정</p>
           <button type="button" onClick={() => setIsPinned(!isPinned)}
             className="relative w-12 h-6 rounded-full transition-all duration-200 flex-shrink-0"
             style={{ background: isPinned ? 'var(--ski-blue)' : 'rgba(255,255,255,0.1)' }}>
@@ -176,7 +177,7 @@ export default function NewNoticePage() {
 
         {error && <p className="text-xs" style={{ color: 'var(--accent-red)' }}>{error}</p>}
 
-        <button type="submit" disabled={submitting}
+        <button type="submit" disabled={submitting || !profile}
           className="w-full text-white rounded-xl py-3.5 text-sm font-black disabled:opacity-50 btn-press"
           style={{ background: 'var(--ski-blue)' }}>
           {submitting ? '등록 중...' : '공지 등록'}

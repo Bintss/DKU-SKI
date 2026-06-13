@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 
 type Profile = {
   id: string
@@ -14,11 +16,19 @@ type Profile = {
 }
 
 export default function AdminMembersPage() {
+  const { profile, loading: profileLoading } = useProfile()
   const [pending, setPending] = useState<Profile[]>([])
   const [members, setMembers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    if (!profile) return
+    if (profile.role !== 'admin') { router.push('/home'); return }
+    fetchProfiles()
+  }, [profile])
 
   const fetchProfiles = async () => {
     const { data } = await supabase
@@ -32,8 +42,6 @@ export default function AdminMembersPage() {
     }
     setLoading(false)
   }
-
-  useEffect(() => { fetchProfiles() }, [])
 
   const approve = async (id: string, joinType: string) => {
     const role = joinType === 'ob' ? 'ob' : 'member'
@@ -56,6 +64,7 @@ export default function AdminMembersPage() {
   }
 
   const filteredMembers = members.filter(m =>
+    !search ||
     m.name.includes(search) ||
     String(m.generation).includes(search) ||
     (m.student_id ?? '').includes(search)
@@ -79,7 +88,7 @@ export default function AdminMembersPage() {
     pending: 'var(--text-hint)',
   }
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
@@ -94,7 +103,7 @@ export default function AdminMembersPage() {
       </div>
 
       {/* 승인 대기 */}
-      {pending.length > 0 && (
+      {pending.length > 0 ? (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-xs font-black tracking-widest uppercase"
@@ -111,8 +120,7 @@ export default function AdminMembersPage() {
                 style={{
                   background: 'rgba(27,63,171,0.1)',
                   border: '0.5px solid rgba(27,63,171,0.3)',
-                }}
-              >
+                }}>
                 <div>
                   <p className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>
                     {p.name}
@@ -142,9 +150,7 @@ export default function AdminMembersPage() {
             ))}
           </div>
         </div>
-      )}
-
-      {pending.length === 0 && (
+      ) : (
         <div className="rounded-2xl px-5 py-4 text-center mb-6"
           style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
           <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
@@ -183,8 +189,7 @@ export default function AdminMembersPage() {
             {filteredMembers.map(p => (
               <div key={p.id}
                 className="rounded-2xl px-4 py-3.5 flex items-center justify-between gap-4"
-                style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}
-              >
+                style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-black flex-shrink-0"
                     style={{ background: 'var(--ski-blue)' }}>

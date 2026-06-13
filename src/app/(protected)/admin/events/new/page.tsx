@@ -3,9 +3,11 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { useProfile } from '@/contexts/ProfileContext'
 import ImageUpload from '@/components/ImageUpload'
 
 export default function NewEventPage() {
+  const { profile } = useProfile()
   const [title, setTitle] = useState('')
   const [type, setType] = useState('daytrip')
   const [startDate, setStartDate] = useState('')
@@ -37,19 +39,23 @@ export default function NewEventPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true); setError('')
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
+    if (!profile) return
+    setLoading(true)
+    setError('')
 
     const { error } = await supabase.from('events').insert({
-      title, type, start_date: startDate, end_date: endDate,
-      location: location || null, description: description || null,
-      detail: detail || null, image_url: imageUrl || null,
+      title, type,
+      start_date: startDate,
+      end_date: endDate,
+      location: location || null,
+      description: description || null,
+      detail: detail || null,
+      image_url: imageUrl || null,
       max_participants: maxParticipants ? parseInt(maxParticipants) : null,
       guest_fee: parseInt(guestFee),
       deadline: deadline ? new Date(deadline).toISOString() : null,
-      is_open: true, created_by: user.id,
+      is_open: true,
+      created_by: profile.id,
     })
 
     if (error) { setError(error.message); setLoading(false); return }
@@ -87,8 +93,8 @@ export default function NewEventPage() {
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>행사명</label>
-          <input type="text" placeholder="예: 2026 춘계 대회" value={title}
-            onChange={e => setTitle(e.target.value)}
+          <input type="text" placeholder="예: 2026 춘계 대회"
+            value={title} onChange={e => setTitle(e.target.value)}
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
         </div>
 
@@ -97,7 +103,10 @@ export default function NewEventPage() {
             <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
               style={{ color: 'var(--text-hint)' }}>시작일</label>
             <input type="date" value={startDate}
-              onChange={e => { setStartDate(e.target.value); if (!endDate) setEndDate(e.target.value) }}
+              onChange={e => {
+                setStartDate(e.target.value)
+                if (!endDate) setEndDate(e.target.value)
+              }}
               className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
           </div>
           <div>
@@ -112,24 +121,24 @@ export default function NewEventPage() {
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>장소</label>
-          <input type="text" placeholder="예: 하이원 리조트" value={location}
-            onChange={e => setLocation(e.target.value)}
+          <input type="text" placeholder="예: 하이원 리조트"
+            value={location} onChange={e => setLocation(e.target.value)}
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
         </div>
 
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>간단 설명</label>
-          <input type="text" placeholder="목록에서 보이는 한 줄 설명" value={description}
-            onChange={e => setDescription(e.target.value)}
+          <input type="text" placeholder="목록에서 보이는 한 줄 설명"
+            value={description} onChange={e => setDescription(e.target.value)}
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
         </div>
 
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>세부 내용</label>
-          <textarea placeholder="행사 상세 안내, 준비물, 일정표 등" value={detail}
-            onChange={e => setDetail(e.target.value)} rows={5}
+          <textarea placeholder="행사 상세 안내, 준비물, 일정표 등"
+            value={detail} onChange={e => setDetail(e.target.value)} rows={5}
             className="w-full rounded-xl px-4 py-3 text-sm resize-none" style={inputStyle} />
         </div>
 
@@ -142,7 +151,8 @@ export default function NewEventPage() {
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>신청 마감일</label>
-          <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)}
+          <input type="datetime-local" value={deadline}
+            onChange={e => setDeadline(e.target.value)}
             className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
         </div>
 
@@ -150,21 +160,22 @@ export default function NewEventPage() {
           <div>
             <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
               style={{ color: 'var(--text-hint)' }}>최대 인원</label>
-            <input type="number" placeholder="없으면 비워두세요" value={maxParticipants}
-              onChange={e => setMaxParticipants(e.target.value)}
+            <input type="number" placeholder="없으면 비워두세요"
+              value={maxParticipants} onChange={e => setMaxParticipants(e.target.value)}
               className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
           </div>
           <div>
             <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
               style={{ color: 'var(--text-hint)' }}>게스트비 (원)</label>
-            <input type="number" value={guestFee} onChange={e => setGuestFee(e.target.value)}
+            <input type="number" value={guestFee}
+              onChange={e => setGuestFee(e.target.value)}
               className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
           </div>
         </div>
 
         {error && <p className="text-xs" style={{ color: 'var(--accent-red)' }}>{error}</p>}
 
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || !profile}
           className="w-full text-white rounded-xl py-3.5 text-sm font-black disabled:opacity-50 btn-press"
           style={{ background: 'var(--ski-blue)' }}>
           {loading ? '등록 중...' : '행사 등록'}
