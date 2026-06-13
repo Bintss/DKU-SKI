@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
+import { subscribePush } from '@/lib/push'
 
 export default function ProfilePage() {
   const { profile, loading: profileLoading, refetch } = useProfile()
@@ -20,6 +21,8 @@ export default function ProfilePage() {
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
 
   // profile 로드 시 폼 초기화
   useEffect(() => {
@@ -31,6 +34,9 @@ export default function ProfilePage() {
     setBankName(profile.bank_name ?? '')
     setAccountNumber(profile.account_number ?? '')
     setAccountHolder(profile.account_holder ?? '')
+    if ('Notification' in window) {
+    setPushEnabled(Notification.permission === 'granted')
+    }
   }, [profile])
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,6 +104,15 @@ export default function ProfilePage() {
     color: 'var(--text-primary)',
   }
 
+  const handlePushToggle = async () => {
+  if (pushEnabled) return // 끄는 건 브라우저 설정에서
+  setPushLoading(true)
+  const success = await subscribePush()
+  setPushEnabled(success)
+  setPushLoading(false)
+  if (!success) alert('알림 허용이 필요해요. 브라우저 설정에서 알림을 허용해주세요.')
+}
+  
   if (profileLoading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
@@ -321,6 +336,36 @@ export default function ProfilePage() {
           </p>
         )}
       </div>
+
+      {/* 알림 설정 */}
+<div className="rounded-2xl p-5 mb-4"
+  style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+  <h2 className="text-xs font-black tracking-widest uppercase mb-3"
+    style={{ color: 'var(--text-hint)' }}>알림 설정</h2>
+  <div className="flex items-center justify-between">
+    <div>
+      <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+        푸시 알림
+      </p>
+      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+        {pushEnabled ? '알림이 활성화됐어요' : '미납 정산, 납부 확인 알림을 받아요'}
+      </p>
+    </div>
+    <button
+      onClick={handlePushToggle}
+      disabled={pushLoading || pushEnabled}
+      className="relative w-12 h-6 rounded-full transition-all duration-200 flex-shrink-0 disabled:opacity-60"
+      style={{ background: pushEnabled ? 'var(--accent-green)' : 'rgba(255,255,255,0.1)' }}>
+      <span className="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200"
+        style={{ left: pushEnabled ? '28px' : '4px' }} />
+    </button>
+  </div>
+  {pushEnabled && (
+    <p className="text-xs mt-3" style={{ color: 'var(--text-hint)' }}>
+      알림을 끄려면 브라우저 설정 → 사이트 설정 → 알림에서 변경해주세요
+    </p>
+  )}
+</div>
 
       {/* 로그아웃 */}
       <button onClick={handleLogout}

@@ -71,23 +71,59 @@ export default function SettlementDetailPage() {
 
   // 부원: 송금했어요 (unpaid → pending)
   const handleMarkPending = async (itemId: string) => {
-    await supabase.from('settlement_items').update({
-      status: 'pending',
-    }).eq('id', itemId)
-    fetchData()
-  }
+  await supabase.from('settlement_items').update({
+    status: 'pending',
+  }).eq('id', itemId)
+
+  // 요청자에게 알림
+  await fetch('/api/push/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.NEXT_PUBLIC_INTERNAL_API_SECRET}`,
+    },
+    body: JSON.stringify({
+      userIds: [settlement!.created_by],
+      title: '송금 확인 요청',
+      body: `${profile?.name}님이 "${settlement!.title}" 정산 송금을 완료했어요. 확인해주세요!`,
+      url: `/settlement/${id}`,
+    }),
+  })
+
+  fetchData()
+}
 
   // 요청자/운영진: 납부 확인 (pending/unpaid → paid 또는 paid → unpaid)
   const handleMarkPaid = async (itemId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'paid' ? 'unpaid' : 'paid'
-    await supabase.from('settlement_items').update({
-      status: newStatus,
-      is_paid: newStatus === 'paid',
-      paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
-    }).eq('id', itemId)
-    fetchData()
+  const newStatus = currentStatus === 'paid' ? 'unpaid' : 'paid'
+  await supabase.from('settlement_items').update({
+    status: newStatus,
+    is_paid: newStatus === 'paid',
+    paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
+  }).eq('id', itemId)
+
+  // 납부 완료 시 해당 부원에게 알림
+  if (newStatus === 'paid') {
+    const item = items.find(i => i.id === itemId)
+    if (item) {
+      await fetch('/api/push/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_INTERNAL_API_SECRET}`,
+        },
+        body: JSON.stringify({
+          userIds: [item.user_id],
+          title: '정산 납부 확인 완료',
+          body: `"${settlement!.title}" 정산 ${item.amount.toLocaleString()}원 납부가 확인됐어요!`,
+          url: `/settlement/${id}`,
+        }),
+      })
+    }
   }
 
+  fetchData()
+}
   const handleDelete = async () => {
     if (!confirm('정산을 삭제할까요?')) return
     await supabase.from('settlements').delete().eq('id', id as string)

@@ -115,6 +115,19 @@ export default function NewSettlementPage() {
     })
 
     await supabase.from('settlement_items').insert(items)
+    await fetch('/api/push/send', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${process.env.NEXT_PUBLIC_INTERNAL_API_SECRET}`,
+  },
+  body: JSON.stringify({
+    userIds: selectedIds.filter(id => id !== profile.id), // 본인 제외
+    title: '새 정산 요청',
+    body: `${profile.name}님이 "${title}" 정산을 요청했어요 · ${amountPerPerson.toLocaleString()}원`,
+    url: `/settlement/${settlement.id}`,
+  }),
+})
     router.push('/settlement')
   }
 
