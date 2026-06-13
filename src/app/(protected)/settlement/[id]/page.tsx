@@ -27,6 +27,7 @@ type SettlementItem = {
   user_id: string
   amount: number
   is_paid: boolean
+  status: 'unpaid' | 'pending' | 'paid'
   paid_at: string | null
   profiles: {
     name: string
@@ -56,7 +57,7 @@ export default function SettlementDetailPage() {
       supabase.from('settlement_items')
         .select('*, profiles(name, generation, bank_name, account_number)')
         .eq('settlement_id', id)
-        .order('is_paid'),
+        .order('status'),
     ])
 
     setSettlement(settlementData)
@@ -68,10 +69,21 @@ export default function SettlementDetailPage() {
     if (profile) fetchData()
   }, [profile, id])
 
-  const handleMarkPaid = async (itemId: string, current: boolean) => {
+  // 부원: 송금했어요 (unpaid → pending)
+  const handleMarkPending = async (itemId: string) => {
     await supabase.from('settlement_items').update({
-      is_paid: !current,
-      paid_at: !current ? new Date().toISOString() : null,
+      status: 'pending',
+    }).eq('id', itemId)
+    fetchData()
+  }
+
+  // 요청자/운영진: 납부 확인 (pending/unpaid → paid 또는 paid → unpaid)
+  const handleMarkPaid = async (itemId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'paid' ? 'unpaid' : 'paid'
+    await supabase.from('settlement_items').update({
+      status: newStatus,
+      is_paid: newStatus === 'paid',
+      paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
     }).eq('id', itemId)
     fetchData()
   }
@@ -88,11 +100,8 @@ export default function SettlementDetailPage() {
     amount: number,
     name: string
   ) => {
-    // 토스 앱 딥링크 시도
     const tossDeepLink = `supertoss://send?bank=${encodeURIComponent(bankName)}&accountNo=${accountNumber}&amount=${amount}&origin=${encodeURIComponent(name)}`
     window.location.href = tossDeepLink
-
-    // 앱 미설치 시 1.5초 후 토스 웹으로 fallback
     setTimeout(() => {
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
       const isAndroid = /Android/.test(navigator.userAgent)
@@ -127,17 +136,32 @@ export default function SettlementDetailPage() {
   const myItem = items.find(i => i.user_id === profile?.id)
   const isCreator = settlement.created_by === profile?.id
   const isAdmin = profile?.role === 'admin'
-  const paidCount = items.filter(i => i.is_paid).length
+  const canConfirm = isCreator || isAdmin
+
+  const paidCount = items.filter(i => i.status === 'paid').length
+  const pendingCount = items.filter(i => i.status === 'pending').length
   const totalCount = items.length
-  const collectedAmount = items.filter(i => i.is_paid).reduce((s, i) => s + i.amount, 0)
+  const collectedAmount = items.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0)
   const progressPct = totalCount > 0 ? (paidCount / totalCount) * 100 : 0
+
+  const statusLabel = (status: string) => {
+    if (status === 'paid') return '납부완료'
+    if (status === 'pending') return '확인 대기'
+    return '미납'
+  }
+
+  const statusColor = (status: string) => {
+    if (status === 'paid') return { bg: 'rgba(46,204,113,0.2)', color: 'var(--accent-green)' }
+    if (status === 'pending') return { bg: 'rgba(255,214,0,0.15)', color: '#FFD700' }
+    return { bg: 'rgba(255,255,255,0.06)', color: 'var(--text-hint)' }
+  }
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="flex items-center justify-between mb-4">
         <a href="/settlement" className="text-xs font-semibold"
           style={{ color: 'var(--text-tertiary)' }}>← 정산 목록</a>
-        {(isCreator || isAdmin) && (
+        {canConfirm && (
           <button onClick={handleDelete}
             className="text-xs font-black btn-press" style={{ color: '#FF6B6B' }}>
             삭제
@@ -177,7 +201,10 @@ export default function SettlementDetailPage() {
           <div className="text-right">
             <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>수금 현황</p>
             <p className="text-sm font-black" style={{ color: '#fff' }}>
-              {paidCount}/{totalCount}명 · {collectedAmount.toLocaleString()}원
+              {paidCount}/{totalCount}명 완료
+              {pendingCount > 0 && (
+                <span style={{ color: '#FFD700' }}> · {pendingCount}명 확인대기</span>
+              )}
             </p>
           </div>
         </div>
@@ -185,14 +212,23 @@ export default function SettlementDetailPage() {
         {/* 진행률 바 */}
         <div className="mt-3 h-1.5 rounded-full overflow-hidden"
           style={{ background: 'rgba(255,255,255,0.15)' }}>
-          <div className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${progressPct}%`,
-              background: 'rgba(255,255,255,0.7)',
-            }} />
+          {/* 확인 대기 */}
+          <div className="h-full flex">
+            <div className="h-full rounded-l-full transition-all duration-500"
+              style={{
+                width: `${progressPct}%`,
+                background: 'rgba(255,255,255,0.7)',
+              }} />
+            <div className="h-full transition-all duration-500"
+              style={{
+                width: `${totalCount > 0 ? (pendingCount / totalCount) * 100 : 0}%`,
+                background: 'rgba(255,214,0,0.5)',
+              }} />
+          </div>
         </div>
         <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
           {Math.round(progressPct)}% 수금 완료
+          {pendingCount > 0 && ` · ${pendingCount}명 송금 확인 필요`}
         </p>
       </div>
 
@@ -200,38 +236,49 @@ export default function SettlementDetailPage() {
       {myItem && (
         <div className="rounded-2xl p-5 mb-4"
           style={{
-            background: myItem.is_paid
-              ? 'rgba(46,204,113,0.1)' : 'rgba(240,149,149,0.1)',
-            border: `0.5px solid ${myItem.is_paid
-              ? 'rgba(46,204,113,0.3)' : 'rgba(240,149,149,0.3)'}`,
+            background: myItem.status === 'paid'
+              ? 'rgba(46,204,113,0.1)'
+              : myItem.status === 'pending'
+              ? 'rgba(255,214,0,0.08)'
+              : 'rgba(240,149,149,0.1)',
+            border: `0.5px solid ${myItem.status === 'paid'
+              ? 'rgba(46,204,113,0.3)'
+              : myItem.status === 'pending'
+              ? 'rgba(255,214,0,0.3)'
+              : 'rgba(240,149,149,0.3)'}`,
           }}>
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-black tracking-widest uppercase"
-              style={{ color: myItem.is_paid ? 'rgba(46,204,113,0.7)' : 'rgba(240,149,149,0.7)' }}>
+              style={{
+                color: myItem.status === 'paid' ? 'rgba(46,204,113,0.7)'
+                  : myItem.status === 'pending' ? 'rgba(255,214,0,0.7)'
+                  : 'rgba(240,149,149,0.7)'
+              }}>
               내 정산
             </p>
             <span className="text-xs font-black px-2.5 py-1 rounded-full"
-              style={{
-                background: myItem.is_paid ? 'rgba(46,204,113,0.2)' : 'rgba(240,149,149,0.2)',
-                color: myItem.is_paid ? 'var(--accent-green)' : '#F09595',
-              }}>
-              {myItem.is_paid ? '납부완료' : '미납'}
+              style={statusColor(myItem.status)}>
+              {statusLabel(myItem.status)}
             </span>
           </div>
 
           <p className="text-3xl font-black mb-1"
-            style={{ color: myItem.is_paid ? 'var(--accent-green)' : '#F09595' }}>
+            style={{
+              color: myItem.status === 'paid' ? 'var(--accent-green)'
+                : myItem.status === 'pending' ? '#FFD700'
+                : '#F09595'
+            }}>
             {myItem.amount.toLocaleString()}원
           </p>
 
-          {settlement.due_date && !myItem.is_paid && (
+          {settlement.due_date && myItem.status === 'unpaid' && (
             <p className="text-xs mb-3" style={{ color: 'rgba(240,149,149,0.7)' }}>
               마감일: {settlement.due_date}
             </p>
           )}
 
           {/* 송금 계좌 정보 */}
-          {!myItem.is_paid && settlement.profiles?.account_number && (
+          {myItem.status === 'unpaid' && settlement.profiles?.account_number && (
             <div className="rounded-xl p-3 mb-3"
               style={{
                 background: 'rgba(255,255,255,0.06)',
@@ -249,37 +296,89 @@ export default function SettlementDetailPage() {
             </div>
           )}
 
-          {/* 토스 송금 버튼 */}
-          {!myItem.is_paid && settlement.profiles?.account_number && (
-            <button
-              onClick={() => openToss(
-                settlement.profiles!.account_number!,
-                settlement.profiles!.bank_name ?? '',
-                myItem.amount,
-                settlement.profiles!.name,
+          {/* unpaid 상태: 송금 버튼 */}
+          {myItem.status === 'unpaid' && (
+            <div className="flex flex-col gap-2">
+              {settlement.profiles?.account_number && (
+                <button
+                  onClick={() => openToss(
+                    settlement.profiles!.account_number!,
+                    settlement.profiles!.bank_name ?? '',
+                    myItem.amount,
+                    settlement.profiles!.name,
+                  )}
+                  className="w-full py-3 rounded-xl text-sm font-black btn-press"
+                  style={{ background: '#3182F6', color: '#fff' }}>
+                  토스로 송금하기
+                </button>
               )}
-              className="w-full py-3 rounded-xl text-sm font-black btn-press mb-2"
-              style={{ background: '#3182F6', color: '#fff' }}>
-              토스로 송금하기
-            </button>
+              {settlement.profiles?.account_number && (
+                <button
+                  onClick={() => copyAccount(settlement.profiles!.account_number!)}
+                  className="w-full py-2.5 rounded-xl text-xs font-black btn-press"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    color: 'var(--text-tertiary)',
+                    border: '0.5px solid var(--border-primary)',
+                  }}>
+                  계좌번호 복사
+                </button>
+              )}
+              {/* 송금 완료 신고 버튼 */}
+              <button
+                onClick={() => handleMarkPending(myItem.id)}
+                className="w-full py-2.5 rounded-xl text-xs font-black btn-press"
+                style={{
+                  background: 'rgba(255,214,0,0.1)',
+                  color: '#FFD700',
+                  border: '0.5px solid rgba(255,214,0,0.3)',
+                }}>
+                송금했어요 (확인 요청)
+              </button>
+            </div>
           )}
 
-          {/* 계좌번호 복사 */}
-          {!myItem.is_paid && settlement.profiles?.account_number && (
-            <button
-              onClick={() => copyAccount(settlement.profiles!.account_number!)}
-              className="w-full py-2.5 rounded-xl text-xs font-black btn-press"
+          {/* pending 상태: 확인 대기 안내 */}
+          {myItem.status === 'pending' && (
+            <div className="rounded-xl p-3 text-center"
               style={{
-                background: 'rgba(255,255,255,0.06)',
-                color: 'var(--text-tertiary)',
-                border: '0.5px solid var(--border-primary)',
+                background: 'rgba(255,214,0,0.08)',
+                border: '0.5px solid rgba(255,214,0,0.2)',
               }}>
-              계좌번호 복사
-            </button>
+              <p className="text-xs font-black mb-1" style={{ color: '#FFD700' }}>
+                송금 확인 요청 완료
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                요청자가 확인 후 납부 완료 처리해요
+              </p>
+              {/* 취소 버튼 */}
+              <button
+                onClick={() => handleMarkPending(myItem.id)}
+                className="mt-2 text-xs font-black btn-press"
+                style={{ color: 'rgba(255,255,255,0.2)' }}
+                onClickCapture={async (e) => {
+                  e.stopPropagation()
+                  await supabase.from('settlement_items')
+                    .update({ status: 'unpaid' })
+                    .eq('id', myItem.id)
+                  fetchData()
+                }}>
+                취소
+              </button>
+            </div>
+          )}
+
+          {/* paid 상태 */}
+          {myItem.status === 'paid' && myItem.paid_at && (
+            <p className="text-xs" style={{ color: 'rgba(46,204,113,0.6)' }}>
+              {new Date(myItem.paid_at).toLocaleDateString('ko-KR', {
+                month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+              })} 확인 완료
+            </p>
           )}
 
           {/* 계좌 미등록 안내 */}
-          {!myItem.is_paid && !settlement.profiles?.account_number && (
+          {myItem.status === 'unpaid' && !settlement.profiles?.account_number && (
             <div className="rounded-xl p-3 text-center"
               style={{
                 background: 'rgba(255,255,255,0.04)',
@@ -291,6 +390,16 @@ export default function SettlementDetailPage() {
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
                 직접 연락해서 계좌를 확인해주세요
               </p>
+              <button
+                onClick={() => handleMarkPending(myItem.id)}
+                className="mt-2 w-full py-2 rounded-xl text-xs font-black btn-press"
+                style={{
+                  background: 'rgba(255,214,0,0.1)',
+                  color: '#FFD700',
+                  border: '0.5px solid rgba(255,214,0,0.3)',
+                }}>
+                송금했어요 (확인 요청)
+              </button>
             </div>
           )}
         </div>
@@ -305,66 +414,74 @@ export default function SettlementDetailPage() {
           <span className="ml-2 font-black" style={{ color: 'var(--text-tertiary)' }}>
             {paidCount}/{totalCount}
           </span>
+          {pendingCount > 0 && (
+            <span className="ml-1 font-black" style={{ color: '#FFD700' }}>
+              · {pendingCount}명 확인대기
+            </span>
+          )}
         </h2>
 
         <div className="flex flex-col gap-2">
-          {items.map(item => (
-            <div key={item.id}
-              className="flex items-center gap-3 rounded-xl px-3 py-3"
-              style={{ background: 'rgba(255,255,255,0.03)' }}>
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
-                style={{
-                  background: item.user_id === profile?.id
-                    ? 'var(--accent-green)'
-                    : item.is_paid ? 'rgba(46,204,113,0.3)' : 'var(--ski-blue)',
-                }}>
-                {item.profiles?.name?.[0] ?? '?'}
-              </div>
+          {items.map(item => {
+            const sc = statusColor(item.status)
+            return (
+              <div key={item.id}
+                className="flex items-center gap-3 rounded-xl px-3 py-3"
+                style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
+                  style={{
+                    background: item.user_id === profile?.id
+                      ? 'var(--accent-green)'
+                      : item.status === 'paid' ? 'rgba(46,204,113,0.3)'
+                      : item.status === 'pending' ? 'rgba(255,214,0,0.3)'
+                      : 'var(--ski-blue)',
+                  }}>
+                  {item.profiles?.name?.[0] ?? '?'}
+                </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                    {item.profiles?.name}
-                  </span>
-                  {item.user_id === profile?.id && (
-                    <span className="text-xs font-black"
-                      style={{ color: 'var(--accent-green)' }}>나</span>
-                  )}
-                  <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                    {item.profiles?.generation}기
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                      {item.profiles?.name}
+                    </span>
+                    {item.user_id === profile?.id && (
+                      <span className="text-xs font-black"
+                        style={{ color: 'var(--accent-green)' }}>나</span>
+                    )}
+                    <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                      {item.profiles?.generation}기
+                    </span>
+                  </div>
+                  <span className="text-xs font-black"
+                    style={{
+                      color: item.status === 'paid' ? 'var(--accent-green)'
+                        : item.status === 'pending' ? '#FFD700'
+                        : '#F09595'
+                    }}>
+                    {item.amount.toLocaleString()}원
                   </span>
                 </div>
-                <span className="text-xs font-black"
-                  style={{ color: item.is_paid ? 'var(--accent-green)' : '#F09595' }}>
-                  {item.amount.toLocaleString()}원
-                </span>
-              </div>
 
-              {/* 운영진/요청자: 납부 처리 버튼 */}
-              {(isCreator || isAdmin) ? (
-                <button onClick={() => handleMarkPaid(item.id, item.is_paid)}
-                  className="text-xs font-black px-2.5 py-1.5 rounded-lg flex-shrink-0 btn-press"
-                  style={{
-                    background: item.is_paid
-                      ? 'rgba(46,204,113,0.2)' : 'rgba(255,255,255,0.06)',
-                    color: item.is_paid ? 'var(--accent-green)' : 'var(--text-tertiary)',
-                    border: `0.5px solid ${item.is_paid
-                      ? 'rgba(46,204,113,0.3)' : 'var(--border-primary)'}`,
-                  }}>
-                  {item.is_paid ? '납부완료' : '미납'}
-                </button>
-              ) : (
-                <span className="text-xs font-black px-2.5 py-1.5 rounded-lg flex-shrink-0"
-                  style={{
-                    background: item.is_paid
-                      ? 'rgba(46,204,113,0.15)' : 'rgba(255,255,255,0.04)',
-                    color: item.is_paid ? 'var(--accent-green)' : 'var(--text-hint)',
-                  }}>
-                  {item.is_paid ? '완료' : '미납'}
-                </span>
-              )}
-            </div>
-          ))}
+                {/* 요청자/운영진: 납부 확인 버튼 */}
+                {canConfirm ? (
+                  <button onClick={() => handleMarkPaid(item.id, item.status)}
+                    className="text-xs font-black px-2.5 py-1.5 rounded-lg flex-shrink-0 btn-press"
+                    style={{
+                      background: sc.bg,
+                      color: sc.color,
+                      border: `0.5px solid ${sc.color}40`,
+                    }}>
+                    {statusLabel(item.status)}
+                  </button>
+                ) : (
+                  <span className="text-xs font-black px-2.5 py-1.5 rounded-lg flex-shrink-0"
+                    style={{ background: sc.bg, color: sc.color }}>
+                    {statusLabel(item.status)}
+                  </span>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
     </main>

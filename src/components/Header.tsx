@@ -1,11 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import { createClient } from '@/lib/supabase'
+import { useProfile } from '@/contexts/ProfileContext'
 import Drawer from './Drawer'
 
 export default function Header({ title }: { title?: string }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const { profile } = useProfile()
 
+  // 미납 뱃지는 Header에서 계산 (Drawer에서 받아서 표시)
   return (
     <>
       <header
@@ -17,14 +21,18 @@ export default function Header({ title }: { title?: string }) {
           borderBottom: '0.5px solid rgba(255,255,255,0.06)',
         }}
       >
+        {/* 햄버거 버튼 — 이전 디자인 유지 */}
         <button
           onClick={() => setDrawerOpen(true)}
-          className="w-9 h-9 flex flex-col items-center justify-center gap-1.5 rounded-xl transition-colors"
+          className="w-9 h-9 flex flex-col items-center justify-center gap-1.5 rounded-xl transition-colors relative"
           style={{ background: 'rgba(255,255,255,0.06)' }}
         >
-          <span className="w-4 h-px rounded-full block" style={{ background: 'rgba(255,255,255,0.7)' }}></span>
-          <span className="w-4 h-px rounded-full block" style={{ background: 'rgba(255,255,255,0.7)' }}></span>
-          <span className="w-2.5 h-px rounded-full block" style={{ background: 'rgba(255,255,255,0.7)' }}></span>
+          <span className="w-4 h-px rounded-full block"
+            style={{ background: 'rgba(255,255,255,0.7)' }} />
+          <span className="w-4 h-px rounded-full block"
+            style={{ background: 'rgba(255,255,255,0.7)' }} />
+          <span className="w-2.5 h-px rounded-full block"
+            style={{ background: 'rgba(255,255,255,0.7)' }} />
         </button>
 
         {title && (

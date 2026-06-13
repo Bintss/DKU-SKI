@@ -23,6 +23,7 @@ type SettlementItem = {
   user_id: string
   amount: number
   is_paid: boolean
+  status: 'unpaid' | 'pending' | 'paid'
 }
 
 export default function SettlementPage() {
@@ -67,8 +68,9 @@ export default function SettlementPage() {
   const mySettlements = settlements.filter(s => getMyItem(s.id))
   const displaySettlements = tab === 'mine' ? mySettlements : settlements
 
-  const unpaidItems = myItems.filter(i => !i.is_paid)
-  const totalUnpaid = unpaidItems.reduce((sum, i) => sum + i.amount, 0)
+  const unpaidItems = myItems.filter(i => i.status !== 'paid')
+const pendingItems = myItems.filter(i => i.status === 'pending')
+const totalUnpaid = unpaidItems.reduce((sum, i) => sum + i.amount, 0)
 
   if (profileLoading || loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
@@ -106,8 +108,9 @@ export default function SettlementPage() {
             {totalUnpaid.toLocaleString()}원
           </p>
           <p className="text-xs mt-1" style={{ color: 'rgba(240,149,149,0.6)' }}>
-            미납된 정산이 {unpaidItems.length}건 있어요
-          </p>
+  미납 {unpaidItems.filter(i => i.status === 'unpaid').length}건
+  {pendingItems.length > 0 && ` · 확인대기 ${pendingItems.length}건`}
+</p>
         </div>
       )}
 
