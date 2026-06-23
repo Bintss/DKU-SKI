@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useProfile } from '@/contexts/ProfileContext'
@@ -10,8 +10,8 @@ const NAV_ITEMS = [
   { href: '/notices', label: '공지사항' },
   { href: '/camp', label: '합숙' },
   { href: '/events', label: '행사' },
-  { href: '/settlement', label: '정산하기' },
-  { href: '/members', label: '동문찾기' },
+  { href: '/settlement', label: '정산' },
+  { href: '/members', label: '동문 디렉토리' },
   { href: '/community', label: '커뮤니티' },
   { href: '/finance', label: '재무 공시' },
 ]
@@ -29,25 +29,45 @@ export default function Drawer({ open, onClose }: DrawerProps) {
   const { profile } = useProfile()
   const supabase = createClient()
 
-  useEffect(() => {
+  const fetchBadges = useCallback(async () => {
     if (!profile) return
-    const fetchBadges = async () => {
-      const [{ data: noticeData }, { data: readData }, { data: settlementData }] =
-        await Promise.all([
-          supabase.from('notices').select('id'),
-          supabase.from('notice_reads').select('notice_id').eq('user_id', profile.id),
-          supabase.from('settlement_items')
-            .select('id')
-            .eq('user_id', profile.id)
-            .in('status', ['unpaid', 'pending']),
-        ])
+    const [{ data: noticeData }, { data: readData }, { data: settlementData }] =
+      await Promise.all([
+        supabase.from('notices').select('id'),
+        supabase.from('notice_reads').select('notice_id').eq('user_id', profile.id),
+        supabase.from('settlement_items')
+          .select('id')
+          .eq('user_id', profile.id)
+          .in('status', ['unpaid', 'pending']),
+      ])
 
-      const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
-      setUnreadNotices((noticeData ?? []).filter(n => !readSet.has(n.id)).length)
-      setUnpaidSettlements(settlementData?.length ?? 0)
-    }
+    const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
+    setUnreadNotices((noticeData ?? []).filter(n => !readSet.has(n.id)).length)
+    setUnpaidSettlements(settlementData?.length ?? 0)
+  }, [profile])
+
+  // pathname이 바뀔 때마다 갱신
+  useEffect(() => {
     fetchBadges()
-  }, [profile, pathname])
+  }, [fetchBadges, pathname])
+
+  // 뒤로가기 등으로 pathname이 안 바뀌어도, 탭이 다시 보이거나 포커스될 때 갱신
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchBadges()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', fetchBadges)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', fetchBadges)
+    }
+  }, [fetchBadges])
+
+  // 드로어를 열 때도 최신 상태로 갱신
+  useEffect(() => {
+    if (open) fetchBadges()
+  }, [open, fetchBadges])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()

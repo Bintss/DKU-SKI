@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
-import Link from 'next/link'
 import { SkeletonNotice } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
 
@@ -26,26 +25,40 @@ export default function NoticesPage() {
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
-  useEffect(() => {
+  const fetchData = useCallback(async () => {
     if (!profile) return
-    const fetchData = async () => {
-      const [{ data: noticeData }, { data: readData }] = await Promise.all([
-        supabase.from('notices')
-          .select('*, profiles(name)')
-          .order('is_pinned', { ascending: false })
-          .order('created_at', { ascending: false }),
-        supabase.from('notice_reads')
-          .select('notice_id')
-          .eq('user_id', profile.id),
-      ])
+    const [{ data: noticeData }, { data: readData }] = await Promise.all([
+      supabase.from('notices')
+        .select('*, profiles(name)')
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false }),
+      supabase.from('notice_reads')
+        .select('notice_id')
+        .eq('user_id', profile.id),
+    ])
 
-      setNotices(noticeData ?? [])
-      const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
-      setUnreadIds(new Set((noticeData ?? []).filter(n => !readSet.has(n.id)).map(n => n.id)))
-      setLoading(false)
-    }
-    fetchData()
+    setNotices(noticeData ?? [])
+    const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
+    setUnreadIds(new Set((noticeData ?? []).filter(n => !readSet.has(n.id)).map(n => n.id)))
+    setLoading(false)
   }, [profile])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // 페이지로 돌아올 때마다 최신 읽음 상태 다시 반영
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchData()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', fetchData)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', fetchData)
+    }
+  }, [fetchData])
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -74,11 +87,11 @@ export default function NoticesPage() {
           <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>공지사항</h1>
         </div>
         {profile?.role === 'admin' && (
-          <Link href="/notices/new"
+          <a href="/notices/new"
             className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press"
             style={{ background: 'var(--ski-blue)' }}>
             + 작성
-          </Link>
+          </a>
         )}
       </div>
 
@@ -93,7 +106,7 @@ export default function NoticesPage() {
           {notices.map(notice => {
             const isUnread = unreadIds.has(notice.id)
             return (
-              <Link key={notice.id} href={`/notices/${notice.id}`}
+              <a key={notice.id} href={`/notices/${notice.id}`}
                 className="block rounded-2xl p-5 card-hover btn-press"
                 style={{
                   background: isUnread ? 'rgba(27,63,171,0.12)' : 'var(--bg-card)',
@@ -136,7 +149,7 @@ export default function NoticesPage() {
                     {formatDate(notice.created_at)}
                   </span>
                 </div>
-              </Link>
+              </a>
             )
           })}
         </div>
