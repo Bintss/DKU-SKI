@@ -1,15 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase'
-import { useProfile } from '@/contexts/ProfileContext'
 import Drawer from './Drawer'
+import EmergencyButton from './EmergencyButton'
 
 export default function Header({ title }: { title?: string }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { profile } = useProfile()
 
-  // 미납 뱃지는 Header에서 계산 (Drawer에서 받아서 표시)
   return (
     <>
       <header
@@ -21,18 +18,14 @@ export default function Header({ title }: { title?: string }) {
           borderBottom: '0.5px solid rgba(255,255,255,0.06)',
         }}
       >
-        {/* 햄버거 버튼 — 이전 디자인 유지 */}
         <button
           onClick={() => setDrawerOpen(true)}
-          className="w-9 h-9 flex flex-col items-center justify-center gap-1.5 rounded-xl transition-colors relative"
+          className="w-9 h-9 flex flex-col items-center justify-center gap-1.5 rounded-xl transition-colors"
           style={{ background: 'rgba(255,255,255,0.06)' }}
         >
-          <span className="w-4 h-px rounded-full block"
-            style={{ background: 'rgba(255,255,255,0.7)' }} />
-          <span className="w-4 h-px rounded-full block"
-            style={{ background: 'rgba(255,255,255,0.7)' }} />
-          <span className="w-2.5 h-px rounded-full block"
-            style={{ background: 'rgba(255,255,255,0.7)' }} />
+          <span className="w-4 h-px rounded-full block" style={{ background: 'rgba(255,255,255,0.7)' }}></span>
+          <span className="w-4 h-px rounded-full block" style={{ background: 'rgba(255,255,255,0.7)' }}></span>
+          <span className="w-2.5 h-px rounded-full block" style={{ background: 'rgba(255,255,255,0.7)' }}></span>
         </button>
 
         {title && (
@@ -42,7 +35,7 @@ export default function Header({ title }: { title?: string }) {
         )}
 
         <div className="ml-auto">
-          <img src="/icon-192x192.png" alt="로고" className="w-7 h-7 rounded-lg opacity-60" />
+          <EmergencyButton />
         </div>
       </header>
 
