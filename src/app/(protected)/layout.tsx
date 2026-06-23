@@ -12,6 +12,21 @@ export default function ProtectedLayout({
 }) {
   const pathname = usePathname()
   const [visible, setVisible] = useState(false)
+  const [showSplash, setShowSplash] = useState(false)
+  const [splashChecked, setSplashChecked] = useState(false)
+
+  // 세션당 한 번만 스플래시 표시 (로그인 후 첫 진입)
+  useEffect(() => {
+    const alreadyShown = sessionStorage.getItem('splash_shown')
+    if (!alreadyShown) {
+      setShowSplash(true)
+      sessionStorage.setItem('splash_shown', 'true')
+      const timer = setTimeout(() => setShowSplash(false), 500)
+      return () => clearTimeout(timer)
+    } else {
+      setSplashChecked(true)
+    }
+  }, [])
 
   useEffect(() => {
     setVisible(false)
@@ -21,16 +36,61 @@ export default function ProtectedLayout({
 
   return (
     <ProfileProvider>
-      <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
-        <Header />
+      {/* 스플래시 화면 — 세션당 최초 1회, 0.5초 */}
+      {showSplash && (
         <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
           style={{
-            opacity: visible ? 1 : 0,
-            transform: visible ? 'translateY(0)' : 'translateY(8px)',
-            transition: 'opacity 0.25s ease, transform 0.25s ease',
+            backgroundImage: 'url(/splash-logo.jpg)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            animation: 'splashFadeOut 0.5s ease forwards',
           }}
         >
-          {children}
+          <style>{`
+            @keyframes splashFadeOut {
+              0% { opacity: 1; }
+              75% { opacity: 1; }
+              100% { opacity: 0; }
+            }
+          `}</style>
+        </div>
+      )}
+
+      <div className="min-h-screen relative" style={{ background: 'var(--bg-primary)' }}>
+        {/* 배경 이미지 — 슬로프 일러스트, 어둡게 깔림 */}
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 pointer-events-none"
+          style={{
+            backgroundImage: 'url(/bg-slope.jpg)',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center top',
+            backgroundSize: 'cover',
+            opacity: 0.1,
+            zIndex: 0,
+          }}
+        />
+        {/* 어둡게 덮는 오버레이 — 콘텐츠 가독성 확보 */}
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 pointer-events-none"
+          style={{
+            background: 'linear-gradient(180deg, rgba(10,10,15,0.4) 0%, rgba(10,10,15,0.85) 40%, rgba(10,10,15,0.97) 100%)',
+            zIndex: 0,
+          }}
+        />
+        <div className="relative" style={{ zIndex: 1 }}>
+          <Header />
+          <div
+            style={{
+              opacity: visible ? 1 : 0,
+              transform: visible ? 'translateY(0)' : 'translateY(8px)',
+              transition: 'opacity 0.25s ease, transform 0.25s ease',
+            }}
+          >
+            {children}
+          </div>
         </div>
       </div>
     </ProfileProvider>

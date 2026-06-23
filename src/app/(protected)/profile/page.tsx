@@ -83,9 +83,10 @@ export default function ProfilePage() {
   }
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
+  sessionStorage.removeItem('splash_shown')
+  await supabase.auth.signOut()
+  router.push('/login')
+}
 
   const roleLabel: Record<string, string> = {
     member: '부원', ob: 'OB', admin: '운영진', pending: '승인 대기'
