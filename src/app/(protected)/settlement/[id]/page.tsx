@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
+import Link from 'next/link'
 
 type Settlement = {
   id: string
@@ -176,8 +177,8 @@ export default function SettlementDetailPage() {
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="flex items-center justify-between mb-4">
-        <a href="/settlement" className="text-xs font-semibold"
-          style={{ color: 'var(--text-tertiary)' }}>← 정산 목록</a>
+        <Link href="/settlement" className="text-xs font-semibold"
+          style={{ color: 'var(--text-tertiary)' }}>← 정산 목록</Link>
         {canConfirm && (
           <button onClick={handleDelete}
             className="text-xs font-black" style={{ color: '#FF6B6B' }}>

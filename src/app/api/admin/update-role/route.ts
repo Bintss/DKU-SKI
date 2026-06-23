@@ -4,9 +4,10 @@ import { cookies } from 'next/headers'
 
 export async function POST(req: NextRequest) {
   try {
-    const { endpoint, p256dh, auth } = await req.json()
-    if (!endpoint || !p256dh || !auth) {
-      return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+    const { targetUserId, newRole } = await req.json()
+    const validRoles = ['member', 'ob', 'admin', 'pending']
+    if (!targetUserId || !validRoles.includes(newRole)) {
+      return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
     }
 
     const cookieStore = await cookies()
@@ -27,18 +28,22 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { error } = await supabase
-      .from('push_subscriptions')
-      .upsert({ user_id: user.id, endpoint, p256dh, auth }, { onConflict: 'user_id,endpoint' })
+    const { data: requester } = await supabase
+      .from('profiles').select('role').eq('id', user.id).single()
 
-    if (error) {
-      console.error('Subscribe error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (requester?.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden: admin only' }, { status: 403 })
     }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role: newRole })
+      .eq('id', targetUserId)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('Subscribe error:', error)
     return NextResponse.json({ error: 'Failed' }, { status: 500 })
   }
 }

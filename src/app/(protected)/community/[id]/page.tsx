@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
+import Link from 'next/link'
 
 type Post = {
   id: string
@@ -141,8 +142,8 @@ export default function PostDetailPage() {
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="flex items-center justify-between mb-4">
-        <a href="/community" className="text-xs font-semibold"
-          style={{ color: 'var(--text-tertiary)' }}>← 목록</a>
+        <Link href="/community" className="text-xs font-semibold"
+          style={{ color: 'var(--text-tertiary)' }}>← 목록</Link>
         {canDelete && (
           <button onClick={handleDeletePost}
             className="text-xs font-black btn-press" style={{ color: '#FF6B6B' }}>

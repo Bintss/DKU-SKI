@@ -23,13 +23,7 @@ export default function AdminMembersPage() {
   const [search, setSearch] = useState('')
   const router = useRouter()
   const supabase = createClient()
-
-  useEffect(() => {
-    if (!profile) return
-    if (profile.role !== 'admin') { router.push('/home'); return }
-    fetchProfiles()
-  }, [profile])
-
+  
   const fetchProfiles = async () => {
     const { data } = await supabase
       .from('profiles')
@@ -43,11 +37,21 @@ export default function AdminMembersPage() {
     setLoading(false)
   }
 
-  const approve = async (id: string, joinType: string) => {
-    const role = joinType === 'ob' ? 'ob' : 'member'
-    await supabase.from('profiles').update({ role }).eq('id', id)
+  useEffect(() => {
+    if (!profile) return
+    if (profile.role !== 'admin') { router.push('/home'); return }
     fetchProfiles()
-  }
+  }, [profile])
+
+  const approve = async (id: string, joinType: string) => {
+  const role = joinType === 'ob' ? 'ob' : 'member'
+  await fetch('/api/admin/update-role', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetUserId: id, newRole: role }),
+  })
+  fetchProfiles()
+}
 
   const reject = async (id: string) => {
     await fetch('/api/admin/reject-user', {
@@ -59,9 +63,13 @@ export default function AdminMembersPage() {
   }
 
   const changeRole = async (id: string, role: string) => {
-    await supabase.from('profiles').update({ role }).eq('id', id)
-    fetchProfiles()
-  }
+  await fetch('/api/admin/update-role', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetUserId: id, newRole: role }),
+  })
+  fetchProfiles()
+}
 
   const filteredMembers = members.filter(m =>
     !search ||

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
+import Link from 'next/link'
 
 type Member = {
   id: string
@@ -74,10 +75,10 @@ export default function MemberDetailPage() {
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      <a href="/members" className="text-xs font-semibold block mb-4"
+      <Link href="/members" className="text-xs font-semibold block mb-4"
         style={{ color: 'var(--text-tertiary)' }}>
         ← 동문 디렉토리
-      </a>
+      </Link>
 
       {/* 프로필 카드 */}
       <div className="rounded-2xl p-6 mb-5 text-center relative overflow-hidden"

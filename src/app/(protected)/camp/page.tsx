@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import Link from 'next/link'
 import { SkeletonList } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
 
@@ -82,11 +83,11 @@ export default function CampPage() {
           <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>합숙</h1>
         </div>
         {profile?.role === 'admin' && (
-          <a href="/camp/new"
+          <Link href="/camp/new"
             className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press"
             style={{ background: 'var(--ski-blue)' }}>
             + 등록
-          </a>
+          </Link>
         )}
       </div>
 
@@ -116,10 +117,10 @@ export default function CampPage() {
             {tab === 'upcoming' ? '예정된 합숙이 없어요' : '지난 합숙 기록이 없어요'}
           </p>
           {tab === 'upcoming' && profile?.role === 'admin' && (
-            <a href="/camp/new" className="mt-4 inline-block text-sm font-black hover:underline"
+            <Link href="/camp/new" className="mt-4 inline-block text-sm font-black hover:underline"
               style={{ color: 'var(--accent-blue)' }}>
               합숙 등록하기
-            </a>
+            </Link>
           )}
         </div>
       ) : (
@@ -130,7 +131,7 @@ export default function CampPage() {
             const isFirst = idx === 0 && tab === 'upcoming'
 
             return (
-              <a key={camp.id} href={`/camp/${camp.id}`}
+              <Link key={camp.id} href={`/camp/${camp.id}`}
                 className="block rounded-2xl overflow-hidden card-hover btn-press"
                 style={{
                   background: isFirst
@@ -160,16 +161,19 @@ export default function CampPage() {
                       </span>
                     )}
                   </div>
+
                   <h2 className="text-xl font-black leading-tight mb-4"
                     style={{ color: isFirst ? '#fff' : 'var(--text-primary)' }}>
                     {camp.title}
                   </h2>
+
                   <div className="flex items-center gap-3 text-sm flex-wrap"
                     style={{ color: isFirst ? 'rgba(255,255,255,0.5)' : 'var(--text-tertiary)' }}>
                     <span className="font-semibold">{formatDateRange(camp.start_date, camp.end_date)}</span>
                     <span className="text-xs">{nights}박 {nights + 1}일</span>
                     {camp.location && <><span>·</span><span className="truncate">{camp.location}</span></>}
                   </div>
+
                   <div className="flex items-center justify-between mt-4">
                     <span className="text-xs font-black px-2.5 py-1 rounded-full"
                       style={{
@@ -188,7 +192,7 @@ export default function CampPage() {
                     </span>
                   </div>
                 </div>
-              </a>
+              </Link>
             )
           })}
         </div>

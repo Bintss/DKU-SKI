@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import Link from 'next/link'
 import { SkeletonList } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
 
@@ -65,16 +66,13 @@ export default function SettlementPage() {
     return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
   }
 
-  // 탭별 필터링
   const activeSettlements = settlements.filter(s => {
     const myItem = getMyItem(s.id)
-    // 내가 포함된 정산 중 미납/확인대기
     return myItem && myItem.status !== 'paid'
   })
 
   const historySettlements = settlements.filter(s => {
     const myItem = getMyItem(s.id)
-    // 내가 포함된 정산 중 완료
     return myItem && myItem.status === 'paid'
   })
 
@@ -85,7 +83,6 @@ export default function SettlementPage() {
     tab === 'history' ? historySettlements :
     allSettlements
 
-  // 미납 요약
   const unpaidItems = myItems.filter(i => i.status === 'unpaid')
   const pendingItems = myItems.filter(i => i.status === 'pending')
   const totalUnpaid = unpaidItems.reduce((sum, i) => sum + i.amount, 0)
@@ -125,16 +122,15 @@ export default function SettlementPage() {
             style={{ color: 'var(--text-hint)' }}>Settlement</p>
           <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>정산</h1>
         </div>
-        <a href="/settlement/new"
+        <Link href="/settlement/new"
           className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press"
           style={{ background: 'var(--ski-blue)' }}>
           + 정산 요청
-        </a>
+        </Link>
       </div>
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 gap-3 mb-5">
-        {/* 미납 */}
         <div className="rounded-2xl p-4"
           style={{
             background: totalUnpaid > 0
@@ -162,7 +158,6 @@ export default function SettlementPage() {
           )}
         </div>
 
-        {/* 완료 */}
         <div className="rounded-2xl p-4"
           style={{
             background: 'var(--bg-card)',
@@ -231,7 +226,7 @@ export default function SettlementPage() {
             const ss = myItem ? statusStyle(myItem.status) : null
 
             return (
-              <a key={s.id} href={`/settlement/${s.id}`}
+              <Link key={s.id} href={`/settlement/${s.id}`}
                 className="block rounded-2xl p-5 card-hover btn-press"
                 style={{
                   background: 'var(--bg-card)',
@@ -303,7 +298,7 @@ export default function SettlementPage() {
                     </span>
                   )}
                 </div>
-              </a>
+              </Link>
             )
           })}
         </div>

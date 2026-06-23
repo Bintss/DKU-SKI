@@ -27,17 +27,18 @@ async function sendToUsers(userIds: string[], title: string, body: string, url: 
   const failed: string[] = []
 
   await Promise.allSettled(
-    subscriptions.map(async (sub) => {
-      try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          payload
-        )
-      } catch (err: any) {
-        if (err.statusCode === 410) failed.push(sub.id)
-      }
-    })
-  )
+  subscriptions.map(async (sub) => {
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        payload
+      )
+    } catch (err) {
+      const statusCode = (err as { statusCode?: number }).statusCode
+      if (statusCode === 410) failed.push(sub.id)
+    }
+  })
+)
 
   if (failed.length > 0) {
     await supabase.from('push_subscriptions').delete().in('id', failed)

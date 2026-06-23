@@ -24,7 +24,10 @@ export async function subscribePush(): Promise<boolean> {
       applicationServerKey: urlBase64ToUint8Array(vapidKey),
     })
 
-    const { endpoint, keys } = subscription.toJSON() as any
+    const { endpoint, keys } = subscription.toJSON() as {
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+}
 
     await fetch('/api/push/subscribe', {
       method: 'POST',

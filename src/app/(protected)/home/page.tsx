@@ -51,8 +51,14 @@ export default function HomePage() {
       setUpcomingCamp(campData)
 
       if (financeData) {
-        const totalIncome = financeData.filter((r: any) => r.type === 'income').reduce((s: number, r: any) => s + r.amount, 0)
-        const totalExpense = financeData.filter((r: any) => r.type === 'expense').reduce((s: number, r: any) => s + Math.abs(r.amount), 0)
+        type FinanceRow = { amount: number; type: string }
+
+const totalIncome = (financeData as FinanceRow[])
+  .filter(r => r.type === 'income')
+  .reduce((s, r) => s + r.amount, 0)
+const totalExpense = (financeData as FinanceRow[])
+  .filter(r => r.type === 'expense')
+  .reduce((s, r) => s + Math.abs(r.amount), 0)
         setFinance({ totalIncome, totalExpense, balance: totalIncome - totalExpense })
       }
 

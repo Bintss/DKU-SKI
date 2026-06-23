@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
+import Link from 'next/link'
 
 type Camp = {
   id: string
@@ -253,8 +254,8 @@ export default function CampDetailPage() {
     <main className="max-w-lg mx-auto px-4 pb-40">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">
-        <a href="/camp" className="text-xs font-semibold"
-          style={{ color: 'var(--text-tertiary)' }}>← 합숙</a>
+        <Link href="/camp" className="text-xs font-semibold"
+  style={{ color: 'var(--text-tertiary)' }}>← 합숙</Link>
         {profile?.role === 'admin' && (
           <div className="flex items-center gap-2">
             <a href={`/admin/camps/${id}/edit`}

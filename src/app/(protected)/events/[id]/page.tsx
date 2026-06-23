@@ -80,7 +80,8 @@ export default function EventDetailPage() {
   }
 
   useEffect(() => {
-    if (profile) fetchData()
+    if (!profile) return
+    fetchData()
   }, [profile, id])
 
   const handleApply = async () => {
@@ -177,32 +178,36 @@ export default function EventDetailPage() {
         </h1>
 
         <div className="flex items-stretch gap-3">
-          <div className="w-1 rounded-full flex-shrink-0" style={{ background: typeColor }} />
-          <div className="flex flex-col gap-1.5">
-            {[
-              {
-                label: '날짜', value: event.start_date === event.end_date
-                  ? formatDate(event.start_date)
-                  : `${formatDate(event.start_date)} — ${formatDate(event.end_date)}`
-              },
-              event.location ? { label: '장소', value: event.location } : null,
-              event.deadline ? {
-                label: '마감', value: new Date(event.deadline).toLocaleDateString('ko-KR', {
-                  month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                })
-              } : null,
-            ].filter(Boolean).map((item: any) => (
-              <div key={item.label} className="flex items-center gap-2">
-                <span className="text-xs font-black w-10" style={{ color: 'var(--text-hint)' }}>
-                  {item.label}
-                </span>
-                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  {item.value}
-                </span>
-              </div>
-            ))}
-          </div>
+  <div className="w-1 rounded-full flex-shrink-0" style={{ background: typeColor }} />
+  <div className="flex flex-col gap-1.5">
+    {(
+      [
+        {
+          label: '날짜', value: event.start_date === event.end_date
+            ? formatDate(event.start_date)
+            : `${formatDate(event.start_date)} — ${formatDate(event.end_date)}`
+        },
+        event.location ? { label: '장소', value: event.location } : null,
+        event.deadline ? {
+          label: '마감', value: new Date(event.deadline).toLocaleDateString('ko-KR', {
+            month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+          })
+        } : null,
+      ] as ({ label: string; value: string } | null)[]
+    )
+      .filter((item): item is { label: string; value: string } => item !== null)
+      .map((item) => (
+        <div key={item.label} className="flex items-center gap-2">
+          <span className="text-xs font-black w-10" style={{ color: 'var(--text-hint)' }}>
+            {item.label}
+          </span>
+          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {item.value}
+          </span>
         </div>
+      ))}
+  </div>
+</div>
       </div>
 
       <div className="px-4">

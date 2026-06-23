@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { SkeletonNotice } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
 
@@ -74,11 +74,11 @@ export default function NoticesPage() {
           <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>공지사항</h1>
         </div>
         {profile?.role === 'admin' && (
-          <a href="/notices/new"
+          <Link href="/notices/new"
             className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press"
             style={{ background: 'var(--ski-blue)' }}>
             + 작성
-          </a>
+          </Link>
         )}
       </div>
 
@@ -93,7 +93,7 @@ export default function NoticesPage() {
           {notices.map(notice => {
             const isUnread = unreadIds.has(notice.id)
             return (
-              <a key={notice.id} href={`/notices/${notice.id}`}
+              <Link key={notice.id} href={`/notices/${notice.id}`}
                 className="block rounded-2xl p-5 card-hover btn-press"
                 style={{
                   background: isUnread ? 'rgba(27,63,171,0.12)' : 'var(--bg-card)',
@@ -136,7 +136,7 @@ export default function NoticesPage() {
                     {formatDate(notice.created_at)}
                   </span>
                 </div>
-              </a>
+              </Link>
             )
           })}
         </div>
