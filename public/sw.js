@@ -1,6 +1,3 @@
-// 기존 PWA 캐시 코드 유지 + 푸시 추가
-const CACHE_NAME = 'dku-ski-v1'
-
 self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
@@ -9,21 +6,35 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(clients.claim())
 })
 
-// 푸시 수신
+// 푸시 수신 — 무조건 showNotification을 호출해서 iOS의 구독 취소를 방지
 self.addEventListener('push', (event) => {
-  if (!event.data) return
-
-  const data = event.data.json()
-  const { title, body, url, icon } = data
-
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: icon ?? '/icon-192x192.png',
-      badge: '/icon-192x192.png',
-      data: { url: url ?? '/' },
-      vibrate: [100, 50, 100],
-    })
+    (async () => {
+      let title = '단국대 스키부'
+      let body = '새로운 알림이 있어요'
+      let url = '/'
+      let icon = '/icon-192x192.png'
+
+      try {
+        if (event.data) {
+          const data = event.data.json()
+          title = data.title ?? title
+          body = data.body ?? body
+          url = data.url ?? url
+          icon = data.icon ?? icon
+        }
+      } catch (err) {
+        // 파싱 실패해도 기본값으로 알림은 반드시 표시
+      }
+
+      await self.registration.showNotification(title, {
+        body,
+        icon,
+        badge: '/icon-192x192.png',
+        data: { url },
+        vibrate: [100, 50, 100],
+      })
+    })()
   )
 })
 
