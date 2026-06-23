@@ -21,7 +21,7 @@ export default function ProtectedLayout({
   if (!alreadyShown) {
     setShowSplash(true)
     sessionStorage.setItem('splash_shown', 'true')
-    const timer = setTimeout(() => setShowSplash(false), 1200) // 500 → 1200으로 변경
+    const timer = setTimeout(() => setShowSplash(false), 1800) // 500 → 1800으로 변경
     return () => clearTimeout(timer)
   } else {
     setSplashChecked(true)
@@ -44,7 +44,7 @@ export default function ProtectedLayout({
       backgroundImage: 'url(/splash-logo.jpg)',
       backgroundSize: 'cover',
       backgroundPosition: 'center',
-      animation: 'splashFadeOut 1.2s ease-in-out forwards',
+      animation: 'splashFadeOut 1.8s ease-in-out forwards',
     }}
   >
     <style>{`
@@ -68,7 +68,7 @@ export default function ProtectedLayout({
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'center top',
             backgroundSize: 'cover',
-            opacity: 0.1,
+            opacity: 0.5,
             zIndex: 0,
           }}
         />
@@ -77,7 +77,7 @@ export default function ProtectedLayout({
           aria-hidden="true"
           className="fixed inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(180deg, rgba(10,10,15,0.4) 0%, rgba(10,10,15,0.85) 40%, rgba(10,10,15,0.97) 100%)',
+            background: 'linear-gradient(180deg, rgba(10,10,15,0.4) 0%, rgba(10,10,15,0.85) 35%, rgba(10,10,15,0.97) 75%)',
             zIndex: 0,
           }}
         />
