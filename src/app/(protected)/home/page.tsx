@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
 import { SkeletonHome } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
 
@@ -22,13 +21,31 @@ type FinanceSummary = {
   balance: number
 }
 
+type FinanceRow = { amount: number; type: string }
+
+type Post = {
+  id: string
+  title: string
+  content: string
+  channel: string
+  is_anonymous: boolean
+  created_at: string
+  profiles: { name: string } | null
+  comment_count: number
+}
+
+const CHANNEL_LABEL: Record<string, string> = {
+  free: '자유', student: '재학생', ob: 'OB'
+}
+
 export default function HomePage() {
   const { profile, loading: profileLoading } = useProfile()
   const [upcomingCamp, setUpcomingCamp] = useState<Camp | null>(null)
   const [finance, setFinance] = useState<FinanceSummary | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [unpaidCount, setUnpaidCount] = useState(0)
+  const [recentPosts, setRecentPosts] = useState<Post[]>([])
   const [dataLoading, setDataLoading] = useState(true)
-  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
@@ -41,29 +58,45 @@ export default function HomePage() {
         { data: financeData },
         { data: noticeData },
         { data: readData },
+        { data: settlementData },
+        { data: postsData },
       ] = await Promise.all([
         supabase.from('camps').select('*').gte('end_date', today).order('start_date').limit(1).single(),
         supabase.from('finance').select('amount, type').eq('season', '2026-27'),
         supabase.from('notices').select('id'),
         supabase.from('notice_reads').select('notice_id').eq('user_id', profile.id),
+        supabase.from('settlement_items').select('id').eq('user_id', profile.id).in('status', ['unpaid', 'pending']),
+        supabase.from('posts')
+          .select('id, title, content, channel, is_anonymous, created_at, profiles(name), comments(id)')
+          .order('created_at', { ascending: false })
+          .limit(3),
       ])
 
       setUpcomingCamp(campData)
 
       if (financeData) {
-        type FinanceRow = { amount: number; type: string }
-
-const totalIncome = (financeData as FinanceRow[])
-  .filter(r => r.type === 'income')
-  .reduce((s, r) => s + r.amount, 0)
-const totalExpense = (financeData as FinanceRow[])
-  .filter(r => r.type === 'expense')
-  .reduce((s, r) => s + Math.abs(r.amount), 0)
+        const rows = financeData as FinanceRow[]
+        const totalIncome = rows.filter(r => r.type === 'income').reduce((s, r) => s + r.amount, 0)
+        const totalExpense = rows.filter(r => r.type === 'expense').reduce((s, r) => s + Math.abs(r.amount), 0)
         setFinance({ totalIncome, totalExpense, balance: totalIncome - totalExpense })
       }
 
       const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
       setUnreadCount((noticeData ?? []).filter(n => !readSet.has(n.id)).length)
+      setUnpaidCount(settlementData?.length ?? 0)
+
+      const postsWithCount = (postsData ?? []).map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        content: p.content,
+        channel: p.channel,
+        is_anonymous: p.is_anonymous,
+        created_at: p.created_at,
+        profiles: p.profiles,
+        comment_count: p.comments?.length ?? 0,
+      }))
+      setRecentPosts(postsWithCount)
+
       setDataLoading(false)
     }
     fetchData()
@@ -84,6 +117,25 @@ const totalExpense = (financeData as FinanceRow[])
   const getNights = (start: string, end: string) =>
     Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24))
 
+  const formatRelativeTime = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMin = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
+    if (diffMin < 1) return '방금'
+    if (diffMin < 60) return `${diffMin}분 전`
+    const diffH = Math.floor(diffMin / 60)
+    if (diffH < 24) return `${diffH}시간 전`
+    const diffD = Math.floor(diffH / 24)
+    if (diffD < 7) return `${diffD}일 전`
+    return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+  }
+
+  const getAuthorName = (post: Post) => {
+    if (!post.is_anonymous) return post.profiles?.name ?? '알 수 없음'
+    if (profile?.role === 'admin') return `${post.profiles?.name} (익명)`
+    return '익명'
+  }
+
   if (profileLoading || dataLoading) return (
     <div className="max-w-lg mx-auto pt-4">
       <SkeletonHome />
@@ -92,6 +144,7 @@ const totalExpense = (financeData as FinanceRow[])
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
+      {/* 인사 카드 */}
       <div className="fade-slide-up delay-1 rounded-2xl px-6 py-5 mb-4 relative overflow-hidden"
         style={{
           background: 'linear-gradient(135deg, #1B3FAB 0%, #2E55C8 100%)',
@@ -110,6 +163,7 @@ const totalExpense = (financeData as FinanceRow[])
         </p>
       </div>
 
+      {/* 다음 합숙 카드 */}
       {upcomingCamp && (
         <a href={`/camp/${upcomingCamp.id}`}
           className="fade-slide-up delay-2 block rounded-2xl p-5 mb-4 card-hover btn-press"
@@ -118,7 +172,8 @@ const totalExpense = (financeData as FinanceRow[])
             <span className="text-xs font-black tracking-widest uppercase"
               style={{ color: 'var(--accent-blue)' }}>다음 합숙</span>
             {upcomingCamp.deadline && (
-              <span className="text-xs font-bold" style={{ color: '#FFD700' }}>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700' }}>
                 신청 {daysLeft(upcomingCamp.deadline)}
               </span>
             )}
@@ -144,6 +199,7 @@ const totalExpense = (financeData as FinanceRow[])
         </a>
       )}
 
+      {/* 재무 요약 카드 */}
       {finance && (
         <a href="/finance"
           className="fade-slide-up delay-3 block rounded-2xl p-5 mb-5 card-hover btn-press"
@@ -185,12 +241,13 @@ const totalExpense = (financeData as FinanceRow[])
         </a>
       )}
 
-      <div className="fade-slide-up delay-4 grid grid-cols-4 gap-2.5">
+      {/* 메뉴 그리드 — 공지/행사/동문/정산 */}
+      <div className="fade-slide-up delay-4 grid grid-cols-4 gap-2.5 mb-5">
         {[
           { label: '공지', href: '/notices', badge: unreadCount, color: 'var(--accent-blue)' },
-          { label: '합숙', href: '/camp', badge: 0, color: 'var(--accent-purple)' },
           { label: '행사', href: '/events', badge: 0, color: 'var(--accent-green)' },
           { label: '동문', href: '/members', badge: 0, color: 'var(--accent-orange)' },
+          { label: '정산', href: '/settlement', badge: unpaidCount, color: '#F09595' },
         ].map(item => (
           <a key={item.label} href={item.href}
             className="relative flex flex-col items-center gap-2 py-4 rounded-2xl card-hover btn-press"
@@ -210,6 +267,64 @@ const totalExpense = (financeData as FinanceRow[])
             </span>
           </a>
         ))}
+      </div>
+
+      {/* 커뮤니티 미리보기 카드 */}
+      <div className="fade-slide-up delay-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-black tracking-widest uppercase"
+            style={{ color: 'var(--text-hint)' }}>커뮤니티</p>
+          <a href="/community" className="text-xs font-bold" style={{ color: 'var(--accent-blue)' }}>
+            전체보기 →
+          </a>
+        </div>
+
+        {recentPosts.length === 0 ? (
+          <div className="rounded-2xl p-5 text-center"
+            style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+            <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
+              아직 게시글이 없어요
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl overflow-hidden"
+            style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+            {recentPosts.map((post, i) => (
+              <a key={post.id} href={`/community/${post.id}`}
+                className="block px-5 py-4 card-hover"
+                style={{
+                  borderBottom: i !== recentPosts.length - 1
+                    ? '0.5px solid var(--border-primary)' : 'none',
+                }}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xs font-black px-2 py-0.5 rounded-full flex-shrink-0"
+                    style={{ background: 'rgba(27,63,171,0.2)', color: 'var(--accent-blue)' }}>
+                    {CHANNEL_LABEL[post.channel] ?? post.channel}
+                  </span>
+                  <span className="text-xs truncate" style={{ color: 'var(--text-hint)' }}>
+                    {getAuthorName(post)}
+                  </span>
+                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                    · {formatRelativeTime(post.created_at)}
+                  </span>
+                </div>
+                <p className="text-sm font-bold mb-0.5 truncate" style={{ color: 'var(--text-primary)' }}>
+                  {post.title}
+                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs truncate flex-1" style={{ color: 'var(--text-tertiary)' }}>
+                    {post.content}
+                  </p>
+                  {post.comment_count > 0 && (
+                    <span className="text-xs font-bold ml-2 flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                      댓글 {post.comment_count}
+                    </span>
+                  )}
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     </main>
   )
