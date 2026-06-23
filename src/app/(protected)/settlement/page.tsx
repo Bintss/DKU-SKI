@@ -36,22 +36,38 @@ export default function SettlementPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    if (!profile) return
-    const fetchData = async () => {
-      const [{ data: settlementData }, { data: itemData }] = await Promise.all([
-        supabase.from('settlements')
-          .select('*, profiles(name)')
-          .order('created_at', { ascending: false }),
-        supabase.from('settlement_items')
-          .select('*')
-          .eq('user_id', profile.id),
-      ])
-      setSettlements(settlementData ?? [])
-      setMyItems(itemData ?? [])
-      setLoading(false)
-    }
-    fetchData()
-  }, [profile])
+  if (!profile) return
+
+  const fetchData = async () => {
+    const [{ data: settlementData }, { data: itemData }] = await Promise.all([
+      supabase.from('settlements')
+        .select('*, profiles(name)')
+        .order('created_at', { ascending: false }),
+      supabase.from('settlement_items')
+        .select('*')
+        .eq('user_id', profile.id),
+    ])
+    setSettlements(settlementData ?? [])
+    setMyItems(itemData ?? [])
+    setLoading(false)
+  }
+  fetchData()
+
+  // Realtime 구독 — settlements/settlement_items 변경 시 자동 재조회
+  const channel = supabase
+    .channel('settlement-list-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => {
+      fetchData()
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'settlement_items', filter: `user_id=eq.${profile.id}` }, () => {
+      fetchData()
+    })
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [profile])
 
   const getMyItem = (settlementId: string) =>
     myItems.find(i => i.settlement_id === settlementId)

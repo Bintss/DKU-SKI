@@ -46,10 +46,28 @@ export default function Drawer({ open, onClose }: DrawerProps) {
     setUnpaidSettlements(settlementData?.length ?? 0)
   }, [profile])
 
-  // pathname이 바뀔 때마다 갱신
   useEffect(() => {
-    fetchBadges()
-  }, [fetchBadges, pathname])
+  if (!profile) return
+
+  const channel = supabase
+    .channel('drawer-badge-changes')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'settlement_items',
+      filter: `user_id=eq.${profile.id}`,
+    }, () => {
+      fetchBadges()
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notices' }, () => {
+      fetchBadges()
+    })
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [profile, fetchBadges])
 
   // 뒤로가기 등으로 pathname이 안 바뀌어도, 탭이 다시 보이거나 포커스될 때 갱신
   useEffect(() => {

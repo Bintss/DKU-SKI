@@ -66,8 +66,26 @@ export default function SettlementDetailPage() {
   }
 
   useEffect(() => {
-    if (profile) fetchData()
-  }, [profile, id])
+  if (!profile) return
+  fetchData()
+
+  // Realtime 구독 — 이 정산의 항목 변경 시 자동 재조회
+  const channel = supabase
+    .channel(`settlement-detail-${id}`)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'settlement_items',
+      filter: `settlement_id=eq.${id}`,
+    }, () => {
+      fetchData()
+    })
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [profile, id])
 
   const callStatusApi = async (itemId: string, action: string) => {
     setActionLoading(itemId)
