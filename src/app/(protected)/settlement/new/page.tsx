@@ -13,7 +13,10 @@ type Member = {
 }
 
 export default function NewSettlementPage() {
-  const { profile } = useProfile()
+  const { profile, loading: profileLoading } = useProfile()
+  const router = useRouter()
+  const supabase = createClient()
+
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [totalAmount, setTotalAmount] = useState('')
@@ -22,11 +25,14 @@ export default function NewSettlementPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [splitEqual, setSplitEqual] = useState(true)
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
+  const [clubAccount, setClubAccount] = useState<{
+    bank_name: string | null
+    account_number: string | null
+    account_holder: string | null
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const router = useRouter()
-  const supabase = createClient()
 
   const inputStyle = {
     background: 'var(--bg-secondary)',
@@ -35,17 +41,24 @@ export default function NewSettlementPage() {
   }
 
   useEffect(() => {
-    const fetchMembers = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, name, generation, role')
-        .neq('role', 'pending')
-        .order('generation', { ascending: false })
-      setMembers(data ?? [])
+    if (!profile) return
+    if (profile.role !== 'admin') { router.push('/settlement'); return }
+
+    const fetchData = async () => {
+      const [{ data: memberData }, { data: settingsData }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, name, generation, role')
+          .neq('role', 'pending')
+          .order('generation', { ascending: false }),
+        supabase.from('club_settings').select('*').eq('id', 1).single(),
+      ])
+      setMembers(memberData ?? [])
+      setClubAccount(settingsData ?? null)
       setLoading(false)
     }
-    fetchMembers()
-  }, [])
+    fetchData()
+  }, [profile])
 
   const toggleMember = (id: string) => {
     setSelectedIds(prev =>
@@ -73,7 +86,7 @@ export default function NewSettlementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!profile) return
+    if (submitting) return
     if (selectedIds.length === 0) { setError('정산 대상을 선택해주세요'); return }
     if (!total) { setError('총 금액을 입력해주세요'); return }
 
@@ -85,22 +98,7 @@ export default function NewSettlementPage() {
     setSubmitting(true)
     setError('')
 
-    const { data: settlement, error: sErr } = await supabase
-      .from('settlements')
-      .insert({
-        title,
-        description: description || null,
-        total_amount: total,
-        amount_per_person: splitEqual ? Math.ceil(total / selectedIds.length) : 0,
-        due_date: dueDate || null,
-        created_by: profile.id,
-      })
-      .select()
-      .single()
-
-    if (sErr) { setError(sErr.message); setSubmitting(false); return }
-
-    const items = selectedIds.map((uid, index) => {
+    const targets = selectedIds.map((uid, index) => {
       let amount: number
       if (splitEqual) {
         const base = Math.floor(total / selectedIds.length)
@@ -108,22 +106,34 @@ export default function NewSettlementPage() {
       } else {
         amount = parseInt(customAmounts[uid] || '0')
       }
-      return {
-        settlement_id: settlement.id,
-        user_id: uid,
-        amount,
-        is_paid: false,
-        status: 'unpaid',
-      }
+      return { userId: uid, amount }
     })
 
-    await supabase.from('settlement_items').insert(items)
+    const res = await fetch('/api/settlement/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        description: description || null,
+        totalAmount: total,
+        dueDate: dueDate || null,
+        splitEqual,
+        targets,
+      }),
+    })
 
-    // Webhook이 자동으로 푸시 알림 발송
+    const result = await res.json()
+
+    if (!res.ok) {
+      setError(result.error ?? '정산 생성에 실패했어요')
+      setSubmitting(false)
+      return
+    }
+
     router.push('/settlement')
   }
 
-  if (loading) return (
+  if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
@@ -136,6 +146,32 @@ export default function NewSettlementPage() {
           style={{ color: 'var(--text-hint)' }}>Settlement</p>
         <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>정산 요청</h1>
       </div>
+
+      {/* 받는 계좌 안내 */}
+      {clubAccount?.account_number ? (
+        <div className="rounded-2xl p-4 mb-5"
+          style={{ background: 'rgba(27,63,171,0.1)', border: '0.5px solid rgba(27,63,171,0.25)' }}>
+          <p className="text-xs font-black tracking-widest uppercase mb-1"
+            style={{ color: 'var(--accent-blue)' }}>입금 계좌 (스키부 공식)</p>
+          <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+            {clubAccount.bank_name} {clubAccount.account_number}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+            {clubAccount.account_holder}
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-2xl p-4 mb-5"
+          style={{ background: 'rgba(240,149,149,0.1)', border: '0.5px solid rgba(240,149,149,0.3)' }}>
+          <p className="text-sm font-bold" style={{ color: '#F09595' }}>
+            스키부 계좌가 등록되지 않았어요
+          </p>
+          <a href="/admin/settings" className="text-xs font-black underline"
+            style={{ color: '#F09595' }}>
+            계좌 설정하러 가기
+          </a>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
@@ -207,27 +243,25 @@ export default function NewSettlementPage() {
             </button>
           </div>
 
-          {/* 1/N 미리보기 */}
           {splitEqual && total > 0 && selectedIds.length > 0 && (
-            <div className="rounded-xl px-4 py-3 mb-3 flex items-center justify-between"
+            <div className="rounded-xl px-4 py-3 mb-3"
               style={{ background: 'rgba(27,63,171,0.15)', border: '0.5px solid rgba(27,63,171,0.3)' }}>
-              <span className="text-xs font-black" style={{ color: 'var(--text-hint)' }}>
-                1인당 금액
-              </span>
-              <div className="text-right">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-black" style={{ color: 'var(--text-hint)' }}>
+                  1인당 금액
+                </span>
                 <span className="text-base font-black" style={{ color: 'var(--accent-blue)' }}>
                   {amountPerPerson.toLocaleString()}원
                 </span>
-                {remainder > 0 && (
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                    * {remainder}명은 {(amountPerPerson + 1).toLocaleString()}원 (최대 1원 차이)
-                  </p>
-                )}
               </div>
+              {remainder > 0 && (
+                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                  * {remainder}명은 {(amountPerPerson + 1).toLocaleString()}원 (최대 1원 차이)
+                </p>
+              )}
             </div>
           )}
 
-          {/* 개별 금액 합계 */}
           {!splitEqual && selectedIds.length > 0 && (
             <div className="rounded-xl px-4 py-3 mb-3 flex items-center justify-between"
               style={{
@@ -280,7 +314,7 @@ export default function NewSettlementPage() {
                     </span>
                     {isMe && (
                       <span className="text-xs ml-1.5 font-black"
-                        style={{ color: 'var(--accent-blue)' }}>나</span>
+                        style={{ color: 'var(--accent-blue)' }}>나 (운영진)</span>
                     )}
                     <span className="text-xs ml-1.5" style={{ color: 'var(--text-hint)' }}>
                       {m.generation}기

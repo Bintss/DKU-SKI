@@ -156,10 +156,11 @@ export default function Drawer({ open, onClose }: DrawerProps) {
               <p className="px-4 mb-2 text-xs font-black tracking-widest uppercase"
                 style={{ color: 'var(--text-hint)' }}>운영진</p>
               {[
-                { href: '/admin/members', label: '회원 관리' },
-                { href: '/camp/new', label: '합숙 등록' },
-                { href: '/admin/events/new', label: '행사 등록' },
-              ].map(item => (
+  { href: '/admin/members', label: '회원 관리' },
+  { href: '/camp/new', label: '합숙 등록' },
+  { href: '/admin/events/new', label: '행사 등록' },
+  { href: '/admin/settings', label: '스키부 계좌 설정' },
+].map(item => (
                 <a key={item.href} href={item.href}
                   onClick={onClose}
                   className="flex items-center px-4 py-3 rounded-xl mb-1 text-sm font-bold transition-colors"
