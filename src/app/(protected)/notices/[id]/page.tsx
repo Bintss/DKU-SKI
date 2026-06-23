@@ -30,21 +30,27 @@ export default function NoticeDetailPage() {
   useEffect(() => {
     if (!profile) return
     const fetchData = async () => {
-      const { data: noticeData } = await supabase
-        .from('notices')
-        .select('*, profiles(name)')
-        .eq('id', id)
-        .single()
+  const { data: noticeData } = await supabase
+    .from('notices')
+    .select('*, profiles(name)')
+    .eq('id', id)
+    .single()
 
-      setNotice(noticeData)
-      setLoading(false)
+  setNotice(noticeData)
+  setLoading(false)
 
-      // 읽음 처리 — 백그라운드에서 실행 (UI 블로킹 없음)
-      supabase.from('notice_reads').upsert({
-        notice_id: id as string,
-        user_id: profile.id,
-      }, { onConflict: 'notice_id,user_id' })
-    }
+  // 읽음 처리 — 에러 확인을 위해 await + 로그 추가
+  const { error: readError } = await supabase.from('notice_reads').upsert({
+    notice_id: id as string,
+    user_id: profile.id,
+  }, { onConflict: 'notice_id,user_id' })
+
+  if (readError) {
+    console.error('읽음 처리 실패:', readError)
+  } else {
+    console.log('읽음 처리 성공')
+  }
+}
     fetchData()
   }, [profile, id])
 
