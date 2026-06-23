@@ -206,7 +206,7 @@ export default function HomePage() {
                 {myCampDday === 0 ? 'D-DAY' : myCampDday > 0 ? `D-${myCampDday}` : '진행중'}
               </p>
               <p className="text-[9px] mt-1 whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                신청한 합숙
+                용평가는날!
               </p>
             </div>
           )}

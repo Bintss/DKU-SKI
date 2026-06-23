@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
-import { subscribePush } from '@/lib/push'
 
 export default function ProfilePage() {
   const { profile, loading: profileLoading, refetch } = useProfile()
@@ -13,16 +12,12 @@ export default function ProfilePage() {
   const [bio, setBio] = useState('')
   const [generation, setGeneration] = useState('')
   const [joinType, setJoinType] = useState('')
-  const [bankName, setBankName] = useState('')
-  const [accountNumber, setAccountNumber] = useState('')
-  const [accountHolder, setAccountHolder] = useState('')
+  const [phone, setPhone] = useState('')
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
-  const [pushEnabled, setPushEnabled] = useState(false)
-  const [pushLoading, setPushLoading] = useState(false)
 
   // profile 로드 시 폼 초기화
   useEffect(() => {
@@ -31,12 +26,7 @@ export default function ProfilePage() {
     setBio(profile.bio ?? '')
     setGeneration(String(profile.generation ?? ''))
     setJoinType(profile.join_type ?? 'student')
-    setBankName(profile.bank_name ?? '')
-    setAccountNumber(profile.account_number ?? '')
-    setAccountHolder(profile.account_holder ?? '')
-    if ('Notification' in window) {
-    setPushEnabled(Notification.permission === 'granted')
-    }
+    setPhone((profile as any).phone ?? '')
   }, [profile])
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,8 +45,15 @@ export default function ProfilePage() {
     const avatarUrl = data.publicUrl + '?t=' + Date.now()
 
     await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', profile.id)
-    await refetch() // Context 전역 갱신
+    await refetch()
     setAvatarUploading(false)
+  }
+
+  const formatPhoneInput = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 11)
+    if (digits.length < 4) return digits
+    if (digits.length < 8) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
   }
 
   const handleSave = async () => {
@@ -67,12 +64,10 @@ export default function ProfilePage() {
       name, bio,
       generation: parseInt(generation),
       join_type: joinType,
-      bank_name: bankName || null,
-      account_number: accountNumber || null,
-      account_holder: accountHolder || null,
+      phone: phone || null,
     }).eq('id', profile.id)
 
-    await refetch() // Context 전역 갱신
+    await refetch()
     setEditMode(false)
     setSubmitting(false)
   }
@@ -83,9 +78,7 @@ export default function ProfilePage() {
     setBio(profile.bio ?? '')
     setGeneration(String(profile.generation ?? ''))
     setJoinType(profile.join_type ?? 'student')
-    setBankName(profile.bank_name ?? '')
-    setAccountNumber(profile.account_number ?? '')
-    setAccountHolder(profile.account_holder ?? '')
+    setPhone(profile.phone ?? '')
     setEditMode(false)
   }
 
@@ -104,15 +97,6 @@ export default function ProfilePage() {
     color: 'var(--text-primary)',
   }
 
-  const handlePushToggle = async () => {
-  if (pushEnabled) return // 끄는 건 브라우저 설정에서
-  setPushLoading(true)
-  const success = await subscribePush()
-  setPushEnabled(success)
-  setPushLoading(false)
-  if (!success) alert('알림 허용이 필요해요. 브라우저 설정에서 알림을 허용해주세요.')
-}
-  
   if (profileLoading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
@@ -234,6 +218,14 @@ export default function ProfilePage() {
               </select>
             ),
           },
+          {
+            label: '전화번호',
+            view: (profile as any).phone || '미등록',
+            edit: <input type="tel" value={phone}
+              placeholder="010-0000-0000"
+              onChange={e => setPhone(formatPhoneInput(e.target.value))}
+              className="text-sm font-bold rounded-lg px-3 py-1.5 text-right w-36" style={inputStyle} />,
+          },
           ...(profile.student_id ? [{
             label: '학번',
             view: profile.student_id,
@@ -260,63 +252,17 @@ export default function ProfilePage() {
             <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{item.label}</span>
             {item.custom ? item.custom : (
               editMode && item.edit ? item.edit : (
-                <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                <span className="text-sm font-bold"
+                  style={{
+                    color: item.label === '전화번호' && !item.view
+                      ? 'var(--text-hint)' : 'var(--text-primary)'
+                  }}>
                   {item.view}
                 </span>
               )
             )}
           </div>
         ))}
-      </div>
-
-      {/* 계좌 정보 */}
-      <div className="rounded-2xl p-5 mb-4"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-        <h2 className="text-xs font-black tracking-widest uppercase mb-1"
-          style={{ color: 'var(--text-hint)' }}>계좌 정보</h2>
-        <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>
-          정산 요청 시 송금받을 계좌를 등록해주세요
-        </p>
-
-        {editMode ? (
-          <div className="flex flex-col gap-2">
-            <input type="text" placeholder="은행명 (예: 토스뱅크, 카카오뱅크)"
-              value={bankName} onChange={e => setBankName(e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
-            <input type="text" placeholder="계좌번호"
-              value={accountNumber} onChange={e => setAccountNumber(e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
-            <input type="text" placeholder="예금주"
-              value={accountHolder} onChange={e => setAccountHolder(e.target.value)}
-              className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
-          </div>
-        ) : profile.bank_name && profile.account_number ? (
-          <div className="flex flex-col gap-0">
-            {[
-              { label: '은행', value: profile.bank_name },
-              { label: '계좌번호', value: profile.account_number },
-              { label: '예금주', value: profile.account_holder ?? profile.name },
-            ].map((item, i, arr) => (
-              <div key={item.label}
-                className="flex justify-between py-2.5"
-                style={{
-                  borderBottom: i < arr.length - 1
-                    ? '0.5px solid var(--border-primary)' : 'none'
-                }}>
-                <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
-                  {item.label}
-                </span>
-                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  {item.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
-            등록된 계좌가 없어요
-          </p>
-        )}
       </div>
 
       {/* 자기소개 */}
@@ -336,36 +282,6 @@ export default function ProfilePage() {
           </p>
         )}
       </div>
-
-      {/* 알림 설정 */}
-<div className="rounded-2xl p-5 mb-4"
-  style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-  <h2 className="text-xs font-black tracking-widest uppercase mb-3"
-    style={{ color: 'var(--text-hint)' }}>알림 설정</h2>
-  <div className="flex items-center justify-between">
-    <div>
-      <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-        푸시 알림
-      </p>
-      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-        {pushEnabled ? '알림이 활성화됐어요' : '미납 정산, 납부 확인 알림을 받아요'}
-      </p>
-    </div>
-    <button
-      onClick={handlePushToggle}
-      disabled={pushLoading || pushEnabled}
-      className="relative w-12 h-6 rounded-full transition-all duration-200 flex-shrink-0 disabled:opacity-60"
-      style={{ background: pushEnabled ? 'var(--accent-green)' : 'rgba(255,255,255,0.1)' }}>
-      <span className="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200"
-        style={{ left: pushEnabled ? '28px' : '4px' }} />
-    </button>
-  </div>
-  {pushEnabled && (
-    <p className="text-xs mt-3" style={{ color: 'var(--text-hint)' }}>
-      알림을 끄려면 브라우저 설정 → 사이트 설정 → 알림에서 변경해주세요
-    </p>
-  )}
-</div>
 
       {/* 로그아웃 */}
       <button onClick={handleLogout}

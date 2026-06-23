@@ -16,6 +16,7 @@ type Profile = {
   bank_name: string | null
   account_number: string | null
   account_holder: string | null
+  phone: string | null  // 추가
 }
 
 type ProfileContextType = {
