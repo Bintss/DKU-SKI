@@ -44,12 +44,14 @@ export default function HomePage() {
   const [finance, setFinance] = useState<FinanceSummary | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const [unpaidCount, setUnpaidCount] = useState(0)
+  const [myCampDday, setMyCampDday] = useState<number | null>(null)
   const [recentPosts, setRecentPosts] = useState<Post[]>([])
   const [dataLoading, setDataLoading] = useState(true)
   const supabase = createClient()
 
   useEffect(() => {
     if (!profile) return
+
     const fetchData = async () => {
       const today = new Date().toISOString().split('T')[0]
 
@@ -60,6 +62,7 @@ export default function HomePage() {
         { data: readData },
         { data: settlementData },
         { data: postsData },
+        { data: myParticipations },
       ] = await Promise.all([
         supabase.from('camps').select('*').gte('end_date', today).order('start_date').limit(1).single(),
         supabase.from('finance').select('amount, type').eq('season', '2026-27'),
@@ -70,6 +73,12 @@ export default function HomePage() {
           .select('id, title, content, channel, is_anonymous, created_at, profiles(name), comments(id)')
           .order('created_at', { ascending: false })
           .limit(3),
+        supabase.from('camp_participants')
+          .select('join_date, camps(start_date)')
+          .eq('user_id', profile.id)
+          .gte('join_date', today)
+          .order('join_date', { ascending: true })
+          .limit(1),
       ])
 
       setUpcomingCamp(campData)
@@ -85,6 +94,16 @@ export default function HomePage() {
       setUnreadCount((noticeData ?? []).filter(n => !readSet.has(n.id)).length)
       setUnpaidCount(settlementData?.length ?? 0)
 
+      if (myParticipations && myParticipations.length > 0) {
+        const nextJoinDate = myParticipations[0].join_date
+        const diff = Math.ceil(
+          (new Date(nextJoinDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+        )
+        setMyCampDday(diff)
+      } else {
+        setMyCampDday(null)
+      }
+
       const postsWithCount = (postsData ?? []).map((p: any) => ({
         id: p.id,
         title: p.title,
@@ -99,7 +118,22 @@ export default function HomePage() {
 
       setDataLoading(false)
     }
+
     fetchData()
+
+    // 페이지가 다시 보여질 때마다 재조회 (뒤로가기/스와이프백 포함)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchData()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', fetchData)
+    window.addEventListener('pageshow', fetchData)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', fetchData)
+      window.removeEventListener('pageshow', fetchData)
+    }
   }, [profile])
 
   const roleLabel: Record<string, string> = {
@@ -144,24 +178,40 @@ export default function HomePage() {
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      {/* 인사 카드 */}
-      <div className="fade-slide-up delay-1 rounded-2xl px-6 py-5 mb-4 relative overflow-hidden"
+      {/* 인사 카드 — 클릭 시 프로필로 이동 */}
+      <a href="/profile"
+        className="fade-slide-up delay-1 block rounded-2xl px-6 py-5 mb-4 relative overflow-hidden card-hover btn-press"
         style={{
           background: 'linear-gradient(135deg, #1B3FAB 0%, #2E55C8 100%)',
           boxShadow: '0 8px 32px rgba(27,63,171,0.3)',
         }}>
         <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
           style={{ background: 'white', transform: 'translate(30%, -30%)' }} />
-        <p className="text-xs mb-1 font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          안녕하세요
-        </p>
-        <p className="text-2xl font-black mb-0.5" style={{ color: '#fff' }}>
-          {profile?.name}
-        </p>
-        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          {profile?.generation}기 · {roleLabel[profile?.role ?? 'pending']}
-        </p>
-      </div>
+        <div className="flex items-center justify-between relative">
+          <div>
+            <p className="text-xs mb-1 font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              안녕하세요
+            </p>
+            <p className="text-2xl font-black mb-0.5" style={{ color: '#fff' }}>
+              {profile?.name}
+            </p>
+            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              {profile?.generation}기 · {roleLabel[profile?.role ?? 'pending']}
+            </p>
+          </div>
+          {myCampDday !== null && (
+            <div className="text-center flex-shrink-0 rounded-2xl px-4 py-2.5"
+              style={{ background: 'rgba(255,255,255,0.15)' }}>
+              <p className="text-xl font-black" style={{ color: '#fff', lineHeight: 1 }}>
+                {myCampDday === 0 ? 'D-DAY' : myCampDday > 0 ? `D-${myCampDday}` : '진행중'}
+              </p>
+              <p className="text-[9px] mt-1 whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                신청한 합숙
+              </p>
+            </div>
+          )}
+        </div>
+      </a>
 
       {/* 다음 합숙 카드 */}
       {upcomingCamp && (
@@ -242,27 +292,52 @@ export default function HomePage() {
       )}
 
       {/* 메뉴 그리드 — 공지/행사/동문/정산 */}
-      <div className="fade-slide-up delay-4 grid grid-cols-4 gap-2.5 mb-5">
+      <div className="fade-slide-up delay-4 grid grid-cols-4 gap-2 mb-5">
         {[
-          { label: '공지', href: '/notices', badge: unreadCount, color: 'var(--accent-blue)' },
-          { label: '행사', href: '/events', badge: 0, color: 'var(--accent-green)' },
-          { label: '동문', href: '/members', badge: 0, color: 'var(--accent-orange)' },
-          { label: '정산', href: '/settlement', badge: unpaidCount, color: '#F09595' },
+          {
+            label: '공지', href: '/notices', badge: unreadCount,
+            bg: 'rgba(27,63,171,0.18)', stroke: '#7FA4FF',
+            icon: <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />,
+          },
+          {
+            label: '행사', href: '/events', badge: 0,
+            bg: 'rgba(46,204,113,0.16)', stroke: '#6FE39B',
+            icon: <path d="M3 5h18v16H3zM3 10h18M8 3v4M16 3v4M12 14l1.5 1.5L16 13" />,
+          },
+          {
+            label: '동문', href: '/members', badge: 0,
+            bg: 'rgba(230,126,34,0.16)', stroke: '#F2A35C',
+            icon: <><circle cx="9" cy="7" r="3.2" /><path d="M3.5 20c0-3.5 2.5-6 5.5-6s5.5 2.5 5.5 6" /><circle cx="17.5" cy="8" r="2.4" /><path d="M15.3 13.2c2.4.3 4.2 2.4 4.2 5.3" /></>,
+          },
+          {
+            label: '정산', href: '/settlement', badge: unpaidCount,
+            bg: 'rgba(240,149,149,0.18)', stroke: '#F09595',
+            icon: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18" /><circle cx="12" cy="14.5" r="2" /></>,
+          },
         ].map(item => (
           <a key={item.label} href={item.href}
-            className="relative flex flex-col items-center gap-2 py-4 rounded-2xl card-hover btn-press"
-            style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+            className="relative flex flex-col items-center gap-2 py-3.5 rounded-2xl card-hover btn-press"
+            style={{
+              background: item.badge > 0 ? 'rgba(242,48,48,0.08)' : 'var(--bg-card)',
+              border: item.badge > 0
+                ? '0.5px solid rgba(240,149,149,0.25)'
+                : '0.5px solid var(--border-primary)',
+            }}>
             {item.badge > 0 && (
-              <span className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white"
+              <span className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black text-white"
                 style={{ background: '#E24B4A' }}>
                 {item.badge > 9 ? '9+' : item.badge}
               </span>
             )}
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: `${item.color}20` }}>
-              <div className="w-2 h-2 rounded-full" style={{ background: item.color }} />
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+              style={{ background: item.bg }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke={item.stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {item.icon}
+              </svg>
             </div>
-            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
+            <span className="text-xs font-semibold"
+              style={{ color: item.badge > 0 ? '#F5B5B5' : 'var(--text-secondary)' }}>
               {item.label}
             </span>
           </a>
