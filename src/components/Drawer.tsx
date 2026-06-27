@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { href: '/camp', label: '합숙' },
   { href: '/events', label: '행사' },
   { href: '/settlement', label: '정산' },
-  { href: '/members', label: '동문 디렉토리' },
+  { href: '/members', label: '동문 찾기' },
   { href: '/community', label: '커뮤니티' },
   { href: '/finance', label: '재무 공시' },
 ]
@@ -177,7 +177,7 @@ export default function Drawer({ open, onClose }: DrawerProps) {
   { href: '/admin/members', label: '회원 관리' },
   { href: '/camp/new', label: '합숙 등록' },
   { href: '/admin/events/new', label: '행사 등록' },
-  { href: '/admin/settings', label: '스키부 계좌 설정' },
+  { href: '/admin/settings', label: '스키부 운영 설정' },
 ].map(item => (
                 <a key={item.href} href={item.href}
                   onClick={onClose}
