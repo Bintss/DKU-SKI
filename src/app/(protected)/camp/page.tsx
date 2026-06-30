@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { SkeletonList } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Camp = {
   id: string
@@ -27,17 +28,20 @@ export default function CampPage() {
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
   const supabase = createClient()
 
+  const fetchData = useCallback(async () => {
+    const { data: campData } = await supabase
+      .from('camps')
+      .select('*')
+      .order('start_date', { ascending: false })
+    setCamps(campData ?? [])
+    setLoading(false)
+  }, [supabase])
+
   useEffect(() => {
-    const fetchData = async () => {
-      const { data: campData } = await supabase
-        .from('camps')
-        .select('*')
-        .order('start_date', { ascending: false })
-      setCamps(campData ?? [])
-      setLoading(false)
-    }
     fetchData()
-  }, [])
+  }, [fetchData])
+
+  usePageVisibilityRefetch(fetchData)
 
   const today = new Date().toISOString().split('T')[0]
   const filtered = camps.filter(c =>

@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Notice = {
   id: string
@@ -27,32 +28,35 @@ export default function NoticeDetailPage() {
   const [notice, setNotice] = useState<Notice | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const fetchNotice = useCallback(async () => {
+    const { data: noticeData } = await supabase
+      .from('notices')
+      .select('*, profiles(name)')
+      .eq('id', id)
+      .single()
+
+    setNotice(noticeData)
+    setLoading(false)
+  }, [id, supabase])
+
+  const markAsRead = useCallback(async () => {
+    if (!profile) return
+    const { error } = await supabase.from('notice_reads').upsert({
+      notice_id: id as string,
+      user_id: profile.id,
+    }, { onConflict: 'notice_id,user_id' })
+
+    if (error) console.error('읽음 처리 실패:', error)
+  }, [profile, id, supabase])
+
   useEffect(() => {
     if (!profile) return
-    const fetchData = async () => {
-  const { data: noticeData } = await supabase
-    .from('notices')
-    .select('*, profiles(name)')
-    .eq('id', id)
-    .single()
+    fetchNotice()
+    markAsRead()
+  }, [profile, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  setNotice(noticeData)
-  setLoading(false)
-
-  // 읽음 처리 — 에러 확인을 위해 await + 로그 추가
-  const { error: readError } = await supabase.from('notice_reads').upsert({
-    notice_id: id as string,
-    user_id: profile.id,
-  }, { onConflict: 'notice_id,user_id' })
-
-  if (readError) {
-    console.error('읽음 처리 실패:', readError)
-  } else {
-    console.log('읽음 처리 성공')
-  }
-}
-    fetchData()
-  }, [profile, id])
+  // 탭 복귀 시 공지 내용만 갱신 (읽음 처리는 최초 1회면 충분하므로 재실행 안 함)
+  usePageVisibilityRefetch(fetchNotice, { enabled: !!profile, debounceMs: 3000 })
 
   const handleDelete = async () => {
     if (!confirm('공지사항을 삭제할까요?')) return

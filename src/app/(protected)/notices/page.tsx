@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { SkeletonNotice } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Notice = {
   id: string
@@ -41,24 +42,13 @@ export default function NoticesPage() {
     const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
     setUnreadIds(new Set((noticeData ?? []).filter(n => !readSet.has(n.id)).map(n => n.id)))
     setLoading(false)
-  }, [profile])
+  }, [profile, supabase])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
-  // 페이지로 돌아올 때마다 최신 읽음 상태 다시 반영
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') fetchData()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    window.addEventListener('focus', fetchData)
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility)
-      window.removeEventListener('focus', fetchData)
-    }
-  }, [fetchData])
+  usePageVisibilityRefetch(fetchData, { enabled: !!profile })
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)

@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
 import Link from 'next/link'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Member = {
   id: string
@@ -26,23 +27,24 @@ export default function MemberDetailPage() {
   const [member, setMember] = useState<Member | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const fetchData = useCallback(async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, name, generation, role, join_type, student_id, bio, avatar_url')
+      .eq('id', id)
+      .single()
+    setMember(data)
+    setLoading(false)
+  }, [id, supabase])
+
   useEffect(() => {
     if (!profile) return
-    // 내 프로필이면 /profile로 이동
     if (profile.id === id) { router.replace('/profile'); return }
-
-    const fetchData = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, name, generation, role, join_type, student_id, bio, avatar_url')
-        .eq('id', id)
-        .single()
-      setMember(data)
-      setLoading(false)
-    }
     fetchData()
-  }, [profile, id])
+  }, [profile, id, router, fetchData])
 
+  usePageVisibilityRefetch(fetchData, { enabled: !!profile && profile.id !== id, debounceMs: 5000 })
+  
   const roleLabel: Record<string, string> = {
     member: '부원', ob: 'OB', admin: '운영진', pending: '승인 대기'
   }

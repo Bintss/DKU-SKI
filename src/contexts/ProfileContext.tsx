@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
@@ -31,84 +31,84 @@ const ProfileContext = createContext<ProfileContextType>({
   refetch: async () => {},
 })
 
+// 디바운스 윈도우 — 짧은 시간 내 중복 재조회 방지
+const REFETCH_DEBOUNCE_MS = 3000
+// 세션 만료 임박 기준 — 이 시간 안에 만료되면 미리 갱신
+const REFRESH_THRESHOLD_SEC = 60
+
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const supabase = createClient()
 
-  // 동시 중복 호출 방지 플래그
   const fetchingRef = useRef(false)
   const lastFetchTimeRef = useRef(0)
 
-  const fetchProfile = async (force = false) => {
-  if (fetchingRef.current) return
+  const fetchProfile = useCallback(async (force = false) => {
+    if (fetchingRef.current) return
 
-  const now = Date.now()
-  if (!force && now - lastFetchTimeRef.current < 3000) return
+    const now = Date.now()
+    if (!force && now - lastFetchTimeRef.current < REFETCH_DEBOUNCE_MS) return
 
-  fetchingRef.current = true
-  lastFetchTimeRef.current = now
+    fetchingRef.current = true
+    lastFetchTimeRef.current = now
 
-  try {
-    // 1. 먼저 현재 세션 상태 확인
-    const { data: sessionData } = await supabase.auth.getSession()
+    try {
+      // 1. 세션 확인 — 로컬 스토리지 기반이라 빠름 (네트워크 요청 아님)
+      const { data: sessionData } = await supabase.auth.getSession()
 
-    if (!sessionData.session) {
-      // 세션이 전혀 없으면 로그인 필요
-      setProfile(null)
-      setLoading(false)
-      router.push('/login')
-      return
-    }
-
-    // 2. 만료 시간 확인 — 만료됐거나 곧 만료되면 명시적으로 갱신
-    const expiresAt = sessionData.session.expires_at // unix timestamp (초)
-    const nowSeconds = Math.floor(Date.now() / 1000)
-
-    if (expiresAt && expiresAt < nowSeconds + 60) {
-      // 만료됨 또는 1분 이내 만료 예정 → 명시적으로 refresh 시도
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
-
-      if (refreshError || !refreshData.session) {
-        // refresh마저 실패하면 진짜 만료된 것 — 로그인 페이지로
-        console.error('Session refresh failed:', refreshError)
+      if (!sessionData.session) {
         setProfile(null)
         setLoading(false)
         router.push('/login')
         return
       }
-    }
 
-    // 3. 갱신된(또는 유효한) 세션으로 사용자 정보 조회
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setProfile(null)
+      let activeUser = sessionData.session.user
+
+      // 2. 만료 임박 시에만 명시적 갱신 (네트워크 요청 1회)
+      const expiresAt = sessionData.session.expires_at
+      const nowSeconds = Math.floor(Date.now() / 1000)
+
+      if (expiresAt && expiresAt < nowSeconds + REFRESH_THRESHOLD_SEC) {
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+
+        if (refreshError || !refreshData.session) {
+          console.error('Session refresh failed:', refreshError)
+          setProfile(null)
+          setLoading(false)
+          router.push('/login')
+          return
+        }
+        activeUser = refreshData.session.user
+      }
+
+      // 3. getUser() 재검증 생략 — session.user를 그대로 사용 (불필요한 서버 왕복 제거)
+      //    profiles 조회만 수행 (네트워크 요청 1회)
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', activeUser.id)
+        .single()
+
+      if (error) {
+        console.error('Profile fetch failed:', error)
+      }
+
+      setProfile(data)
       setLoading(false)
-      router.push('/login')
-      return
+    } catch (err) {
+      console.error('fetchProfile error:', err)
+      setLoading(false)
+    } finally {
+      fetchingRef.current = false
     }
-
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-
-    setProfile(data)
-    setLoading(false)
-  } catch (err) {
-    console.error('fetchProfile error:', err)
-    setLoading(false)
-  } finally {
-    fetchingRef.current = false
-  }
-}
+  }, [router, supabase])
 
   useEffect(() => {
     fetchProfile(true)
 
-    // 앱이 다시 보일 때 — 디바운스 적용된 fetchProfile 호출
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') fetchProfile()
     }
@@ -117,14 +117,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('focus', handleVisibility)
     window.addEventListener('pageshow', handleVisibility)
 
-    // Supabase의 onAuthStateChange로 토큰 갱신/로그아웃을 직접 감지
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         setProfile(null)
         router.push('/login')
       }
       if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
-        // 토큰이 갱신되면 프로필도 최신화 (디바운스 적용)
         fetchProfile()
       }
     })
@@ -135,6 +133,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('pageshow', handleVisibility)
       authListener.subscription.unsubscribe()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

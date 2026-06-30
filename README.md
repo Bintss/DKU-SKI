@@ -56,7 +56,7 @@ Infra      Vercel · Web Push (VAPID)
 - **정산 무결성**: 정산 생성은 `settlements` + `settlement_items`를 트랜잭션처럼 처리 — 항목 생성 실패 시 자동 롤백.
 - **실시간 동기화**: Supabase Realtime으로 정산 상태 변경이 새로고침 없이 즉시 반영.
 - **PWA 푸시**: Service Worker + Web Push API. iOS Safari의 silent-push 구독 취소 이슈를 방어하는 fallback 로직 포함.
-
+</details>
 
 ## 📚 문서
 

@@ -2,59 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import webpush from 'web-push'
-
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-)
-
-type PushSubscriptionRow = {
-  id: string
-  user_id: string
-  endpoint: string
-  p256dh: string
-  auth: string
-}
-
-async function sendToUsers(
-  adminClient: any,
-  userIds: string[],
-  title: string,
-  body: string,
-  url: string
-) {
-  if (!userIds.length) return
-
-  const { data: subscriptions } = await adminClient
-    .from('push_subscriptions')
-    .select('*')
-    .in('user_id', userIds) as { data: PushSubscriptionRow[] | null }
-
-  if (!subscriptions?.length) return
-
-  const payload = JSON.stringify({ title, body, url })
-  const failed: string[] = []
-
-  await Promise.allSettled(
-    subscriptions.map(async (sub) => {
-      try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          payload
-        )
-      } catch (err) {
-        const statusCode = (err as { statusCode?: number }).statusCode
-        if (statusCode === 410) failed.push(sub.id)
-      }
-    })
-  )
-
-  if (failed.length > 0) {
-    await adminClient.from('push_subscriptions').delete().in('id', failed)
-  }
-}
+import { sendToUsers } from '@/lib/push-server'
 
 export async function POST(req: NextRequest) {
   try {
@@ -104,8 +52,7 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
-    console.log('SERVICE_ROLE_KEY exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
-console.log('SERVICE_ROLE_KEY length:', process.env.SUPABASE_SERVICE_ROLE_KEY?.length)
+
     const { data: settlement, error: settlementError } = await adminClient
       .from('settlements')
       .insert({

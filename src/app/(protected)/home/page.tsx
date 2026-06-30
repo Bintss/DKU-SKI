@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { SkeletonHome } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Camp = {
   id: string
@@ -38,41 +39,69 @@ const CHANNEL_LABEL: Record<string, string> = {
   free: '자유', student: '재학생', ob: 'OB'
 }
 
+const SEASON = '2026-27' // TODO: club_settings로 이전 예정
+
 export default function HomePage() {
   const { profile, loading: profileLoading } = useProfile()
+  const supabase = createClient()
+
+  // ── profile과 무관하게 즉시 시작 가능한 공개 데이터 ──
   const [upcomingCamp, setUpcomingCamp] = useState<Camp | null>(null)
   const [finance, setFinance] = useState<FinanceSummary | null>(null)
+  const [recentPosts, setRecentPosts] = useState<Post[]>([])
+  const [publicLoading, setPublicLoading] = useState(true)
+
+  // ── profile.id가 필요한 개인화 데이터 ──
   const [unreadCount, setUnreadCount] = useState(0)
   const [unpaidCount, setUnpaidCount] = useState(0)
   const [myCampDday, setMyCampDday] = useState<number | null>(null)
-  const [recentPosts, setRecentPosts] = useState<Post[]>([])
-  const [dataLoading, setDataLoading] = useState(true)
-  const supabase = createClient()
+  const [personalLoading, setPersonalLoading] = useState(true)
 
-  useEffect(() => {
+  const fetchPublicData = useCallback(async () => {
+    const today = new Date().toISOString().split('T')[0]
+
+    const [{ data: campData }, { data: financeData }, { data: postsData }] = await Promise.all([
+      supabase.from('camps').select('*').gte('end_date', today).order('start_date').limit(1).single(),
+      supabase.from('finance').select('amount, type').eq('season', SEASON),
+      supabase.from('posts')
+        .select('id, title, content, channel, is_anonymous, created_at, profiles(name), comments(id)')
+        .order('created_at', { ascending: false })
+        .limit(3),
+    ])
+
+    setUpcomingCamp(campData)
+
+    if (financeData) {
+      const rows = financeData as FinanceRow[]
+      const totalIncome = rows.filter(r => r.type === 'income').reduce((s, r) => s + r.amount, 0)
+      const totalExpense = rows.filter(r => r.type === 'expense').reduce((s, r) => s + Math.abs(r.amount), 0)
+      setFinance({ totalIncome, totalExpense, balance: totalIncome - totalExpense })
+    }
+
+    const postsWithCount = (postsData ?? []).map((p: any) => ({
+      id: p.id,
+      title: p.title,
+      content: p.content,
+      channel: p.channel,
+      is_anonymous: p.is_anonymous,
+      created_at: p.created_at,
+      profiles: p.profiles,
+      comment_count: p.comments?.length ?? 0,
+    }))
+    setRecentPosts(postsWithCount)
+
+    setPublicLoading(false)
+  }, [supabase])
+
+  const fetchPersonalData = useCallback(async () => {
     if (!profile) return
+    const today = new Date().toISOString().split('T')[0]
 
-    const fetchData = async () => {
-      const today = new Date().toISOString().split('T')[0]
-
-      const [
-        { data: campData },
-        { data: financeData },
-        { data: noticeData },
-        { data: readData },
-        { data: settlementData },
-        { data: postsData },
-        { data: myParticipations },
-      ] = await Promise.all([
-        supabase.from('camps').select('*').gte('end_date', today).order('start_date').limit(1).single(),
-        supabase.from('finance').select('amount, type').eq('season', '2026-27'),
+    const [{ data: noticeData }, { data: readData }, { data: settlementData }, { data: myParticipations }] =
+      await Promise.all([
         supabase.from('notices').select('id'),
         supabase.from('notice_reads').select('notice_id').eq('user_id', profile.id),
         supabase.from('settlement_items').select('id').eq('user_id', profile.id).in('status', ['unpaid', 'pending']),
-        supabase.from('posts')
-          .select('id, title, content, channel, is_anonymous, created_at, profiles(name), comments(id)')
-          .order('created_at', { ascending: false })
-          .limit(3),
         supabase.from('camp_participants')
           .select('join_date, camps(start_date)')
           .eq('user_id', profile.id)
@@ -81,60 +110,36 @@ export default function HomePage() {
           .limit(1),
       ])
 
-      setUpcomingCamp(campData)
+    const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
+    setUnreadCount((noticeData ?? []).filter(n => !readSet.has(n.id)).length)
+    setUnpaidCount(settlementData?.length ?? 0)
 
-      if (financeData) {
-        const rows = financeData as FinanceRow[]
-        const totalIncome = rows.filter(r => r.type === 'income').reduce((s, r) => s + r.amount, 0)
-        const totalExpense = rows.filter(r => r.type === 'expense').reduce((s, r) => s + Math.abs(r.amount), 0)
-        setFinance({ totalIncome, totalExpense, balance: totalIncome - totalExpense })
-      }
-
-      const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
-      setUnreadCount((noticeData ?? []).filter(n => !readSet.has(n.id)).length)
-      setUnpaidCount(settlementData?.length ?? 0)
-
-      if (myParticipations && myParticipations.length > 0) {
-        const nextJoinDate = myParticipations[0].join_date
-        const diff = Math.ceil(
-          (new Date(nextJoinDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-        )
-        setMyCampDday(diff)
-      } else {
-        setMyCampDday(null)
-      }
-
-      const postsWithCount = (postsData ?? []).map((p: any) => ({
-        id: p.id,
-        title: p.title,
-        content: p.content,
-        channel: p.channel,
-        is_anonymous: p.is_anonymous,
-        created_at: p.created_at,
-        profiles: p.profiles,
-        comment_count: p.comments?.length ?? 0,
-      }))
-      setRecentPosts(postsWithCount)
-
-      setDataLoading(false)
+    if (myParticipations && myParticipations.length > 0) {
+      const nextJoinDate = myParticipations[0].join_date
+      const diff = Math.ceil(
+        (new Date(nextJoinDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+      )
+      setMyCampDday(diff)
+    } else {
+      setMyCampDday(null)
     }
 
-    fetchData()
+    setPersonalLoading(false)
+  }, [profile, supabase])
 
-    // 페이지가 다시 보여질 때마다 재조회 (뒤로가기/스와이프백 포함)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') fetchData()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    window.addEventListener('focus', fetchData)
-    window.addEventListener('pageshow', fetchData)
+  // 공개 데이터는 profile을 기다리지 않고 즉시 시작
+  useEffect(() => {
+    fetchPublicData()
+  }, [fetchPublicData])
 
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility)
-      window.removeEventListener('focus', fetchData)
-      window.removeEventListener('pageshow', fetchData)
-    }
-  }, [profile])
+  // 개인화 데이터는 profile이 준비된 후 병렬로 시작
+  useEffect(() => {
+    if (profile) fetchPersonalData()
+  }, [profile, fetchPersonalData])
+
+  // 뒤로가기/탭 복귀 시 둘 다 재조회
+  usePageVisibilityRefetch(fetchPublicData)
+  usePageVisibilityRefetch(fetchPersonalData, { enabled: !!profile })
 
   const roleLabel: Record<string, string> = {
     member: '부원', ob: 'OB', admin: '운영진', pending: '승인 대기'
@@ -170,7 +175,9 @@ export default function HomePage() {
     return '익명'
   }
 
-  if (profileLoading || dataLoading) return (
+  // 공개 데이터만 와도 화면 골격을 보여줄 수 있지만,
+  // 인사 카드에 profile.name이 필요하므로 둘 다 기다림 (체감상 큰 차이 없는 선이라 단순함 우선)
+  if (profileLoading || publicLoading) return (
     <div className="max-w-lg mx-auto pt-4">
       <SkeletonHome />
     </div>
@@ -206,7 +213,7 @@ export default function HomePage() {
                 {myCampDday === 0 ? 'D-DAY' : myCampDday > 0 ? `D-${myCampDday}` : '진행중'}
               </p>
               <p className="text-[9px] mt-1 whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                용평가는날!
+                신청한 합숙
               </p>
             </div>
           )}
@@ -256,7 +263,7 @@ export default function HomePage() {
           style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
           <div className="flex items-center justify-between mb-4">
             <p className="text-xs font-black tracking-widest uppercase"
-              style={{ color: 'var(--text-tertiary)' }}>2026-27 재무 현황</p>
+              style={{ color: 'var(--text-tertiary)' }}>{SEASON} 재무 현황</p>
             <span className="text-xs font-bold" style={{ color: 'var(--text-hint)' }}>자세히 →</span>
           </div>
           <div className="grid grid-cols-3 gap-3">

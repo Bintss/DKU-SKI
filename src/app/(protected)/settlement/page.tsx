@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { SkeletonList } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Settlement = {
   id: string
@@ -33,15 +34,13 @@ export default function SettlementPage() {
   const [myItems, setMyItems] = useState<SettlementItem[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'active' | 'history' | 'all'>('active')
-
-  // 관리 모드 (운영진)
   const [manageMode, setManageMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [deleting, setDeleting] = useState(false)
 
   const supabase = createClient()
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!profile) return
     const [{ data: settlementData }, { data: itemData }] = await Promise.all([
       supabase.from('settlements')
@@ -54,11 +53,15 @@ export default function SettlementPage() {
     setSettlements(settlementData ?? [])
     setMyItems(itemData ?? [])
     setLoading(false)
-  }
+  }, [profile, supabase])
 
   useEffect(() => {
-    if (!profile) return
     fetchData()
+  }, [fetchData])
+
+  // Realtime — 다른 사람의 정산 상태 변경을 즉시 반영
+  useEffect(() => {
+    if (!profile) return
 
     const channel = supabase
       .channel('settlement-list-changes')
@@ -73,7 +76,10 @@ export default function SettlementPage() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [profile])
+  }, [profile, fetchData, supabase])
+
+  // 탭 복귀 시 보완 갱신
+  usePageVisibilityRefetch(fetchData, { enabled: !!profile, debounceMs: 2000 })
 
   const getMyItem = (settlementId: string) =>
     myItems.find(i => i.settlement_id === settlementId)

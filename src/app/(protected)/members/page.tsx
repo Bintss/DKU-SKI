@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { SkeletonList } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Member = {
   id: string
@@ -25,19 +26,22 @@ export default function MembersPage() {
   const [selectedGeneration, setSelectedGeneration] = useState<number | null>(null)
   const supabase = createClient()
 
+  const fetchData = useCallback(async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, name, generation, role, join_type, student_id, bio, avatar_url')
+      .neq('role', 'pending')
+      .order('generation', { ascending: false })
+      .order('name')
+    setMembers(data ?? [])
+    setLoading(false)
+  }, [supabase])
+
   useEffect(() => {
-    const fetchData = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, name, generation, role, join_type, student_id, bio, avatar_url')
-        .neq('role', 'pending')
-        .order('generation', { ascending: false })
-        .order('name')
-      setMembers(data ?? [])
-      setLoading(false)
-    }
     fetchData()
-  }, [])
+  }, [fetchData])
+
+  usePageVisibilityRefetch(fetchData)
 
   // 클라이언트 사이드 필터링
   const generations = [...new Set(members.map(m => m.generation))].sort((a, b) => b - a)

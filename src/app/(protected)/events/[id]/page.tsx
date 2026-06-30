@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Event = {
   id: string
@@ -55,7 +56,7 @@ export default function EventDetailPage() {
   const [applyMode, setApplyMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!profile) return
 
     const [{ data: eventData }, { data: participantData }] = await Promise.all([
@@ -77,12 +78,15 @@ export default function EventDetailPage() {
       setLeaveDate(eventData.end_date)
     }
     setLoading(false)
-  }
+  }, [profile, id, supabase])
 
   useEffect(() => {
     if (!profile) return
     fetchData()
-  }, [profile, id])
+  }, [profile, fetchData])
+
+  // 신청 폼 작성 중(applyMode)에는 자동 갱신을 막아서 입력값이 날아가지 않게 함
+  usePageVisibilityRefetch(fetchData, { enabled: !!profile && !applyMode, debounceMs: 2000 })
 
   const handleApply = async () => {
     if (!event || !profile) return

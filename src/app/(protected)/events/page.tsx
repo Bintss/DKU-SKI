@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { SkeletonList } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Event = {
   id: string
@@ -40,17 +41,20 @@ export default function EventsPage() {
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
   const supabase = createClient()
 
+  const fetchEvents = useCallback(async () => {
+    const { data } = await supabase
+      .from('events')
+      .select('*')
+      .order('start_date', { ascending: true })
+    setEvents(data ?? [])
+    setLoading(false)
+  }, [supabase])
+
   useEffect(() => {
-    const fetchEvents = async () => {
-      const { data } = await supabase
-        .from('events')
-        .select('*')
-        .order('start_date', { ascending: true })
-      setEvents(data ?? [])
-      setLoading(false)
-    }
     fetchEvents()
-  }, [])
+  }, [fetchEvents])
+
+  usePageVisibilityRefetch(fetchEvents)
 
   const today = new Date().toISOString().split('T')[0]
   const filtered = events.filter(e =>

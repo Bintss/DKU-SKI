@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 const NAV_ITEMS = [
   { href: '/home', label: '홈' },
@@ -44,43 +45,39 @@ export default function Drawer({ open, onClose }: DrawerProps) {
     const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
     setUnreadNotices((noticeData ?? []).filter(n => !readSet.has(n.id)).length)
     setUnpaidSettlements(settlementData?.length ?? 0)
-  }, [profile])
+  }, [profile, supabase])
 
+  // 최초 + profile 변경 시
   useEffect(() => {
-  if (!profile) return
-
-  const channel = supabase
-    .channel('drawer-badge-changes')
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'settlement_items',
-      filter: `user_id=eq.${profile.id}`,
-    }, () => {
-      fetchBadges()
-    })
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notices' }, () => {
-      fetchBadges()
-    })
-    .subscribe()
-
-  return () => {
-    supabase.removeChannel(channel)
-  }
-}, [profile, fetchBadges])
-
-  // 뒤로가기 등으로 pathname이 안 바뀌어도, 탭이 다시 보이거나 포커스될 때 갱신
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') fetchBadges()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    window.addEventListener('focus', fetchBadges)
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility)
-      window.removeEventListener('focus', fetchBadges)
-    }
+    fetchBadges()
   }, [fetchBadges])
+
+  // Realtime 구독 — DB 변경을 실시간으로 반영
+  useEffect(() => {
+    if (!profile) return
+
+    const channel = supabase
+      .channel('drawer-badge-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'settlement_items',
+        filter: `user_id=eq.${profile.id}`,
+      }, () => {
+        fetchBadges()
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notices' }, () => {
+        fetchBadges()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [profile, fetchBadges, supabase])
+
+  // 탭 복귀/뒤로가기 — Realtime이 못 잡는 케이스(연결 끊김 등)의 보완용
+  usePageVisibilityRefetch(fetchBadges, { enabled: !!profile, debounceMs: 2000 })
 
   // 드로어를 열 때도 최신 상태로 갱신
   useEffect(() => {
@@ -100,7 +97,6 @@ export default function Drawer({ open, onClose }: DrawerProps) {
 
   return (
     <>
-      {/* 오버레이 */}
       {open && (
         <div
           className="fixed inset-0 z-40"
@@ -109,7 +105,6 @@ export default function Drawer({ open, onClose }: DrawerProps) {
         />
       )}
 
-      {/* 드로어 패널 */}
       <div
         className="fixed top-0 left-0 h-full z-50 flex flex-col"
         style={{
@@ -120,7 +115,6 @@ export default function Drawer({ open, onClose }: DrawerProps) {
           transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
         }}
       >
-        {/* 드로어 헤더 */}
         <div className="flex items-center justify-between px-5 pt-14 pb-6"
           style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
           {profile && (
@@ -140,7 +134,6 @@ export default function Drawer({ open, onClose }: DrawerProps) {
           </button>
         </div>
 
-        {/* 네비게이션 */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           {NAV_ITEMS.map(item => {
             const isActive = pathname.startsWith(item.href)
@@ -167,18 +160,17 @@ export default function Drawer({ open, onClose }: DrawerProps) {
             )
           })}
 
-          {/* 운영진 메뉴 */}
           {profile?.role === 'admin' && (
             <>
               <div className="mx-4 my-3 h-px" style={{ background: 'var(--border-primary)' }} />
               <p className="px-4 mb-2 text-xs font-black tracking-widest uppercase"
                 style={{ color: 'var(--text-hint)' }}>운영진</p>
               {[
-  { href: '/admin/members', label: '회원 관리' },
-  { href: '/camp/new', label: '합숙 등록' },
-  { href: '/admin/events/new', label: '행사 등록' },
-  { href: '/admin/settings', label: '스키부 운영 설정' },
-].map(item => (
+                { href: '/admin/members', label: '회원 관리' },
+                { href: '/camp/new', label: '합숙 등록' },
+                { href: '/admin/events/new', label: '행사 등록' },
+                { href: '/admin/settings', label: '스키부 운영 설정' },
+              ].map(item => (
                 <a key={item.href} href={item.href}
                   onClick={onClose}
                   className="flex items-center px-4 py-3 rounded-xl mb-1 text-sm font-bold transition-colors"
@@ -193,7 +185,6 @@ export default function Drawer({ open, onClose }: DrawerProps) {
           )}
         </nav>
 
-        {/* 하단: 프로필·로그아웃 */}
         <div className="px-3 pb-8" style={{ borderTop: '0.5px solid var(--border-primary)' }}>
           <a href="/profile" onClick={onClose}
             className="flex items-center px-4 py-3 rounded-xl mt-3 mb-1 transition-colors"

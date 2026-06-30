@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
 import Link from 'next/link'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Camp = {
   id: string
@@ -72,7 +73,8 @@ export default function CampDetailPage() {
   const [guestLeaveDate, setGuestLeaveDate] = useState('')
   const [guestFee, setGuestFee] = useState('')
 
-  const fetchData = async () => {
+
+  const fetchData = useCallback(async () => {
     if (!profile) return
 
     const [{ data: campData }, { data: participantData }, { data: guestData }] =
@@ -99,11 +101,14 @@ export default function CampDetailPage() {
       setGuestLeaveDate(campData.end_date)
     }
     setLoading(false)
-  }
+  }, [profile, id, supabase])
 
   useEffect(() => {
     if (profile) fetchData()
-  }, [profile, id])
+  }, [profile, fetchData])
+
+  // 탭 복귀 시 재조회 — 단, 신청 모드 중에는 막아서 선택 중인 날짜가 날아가지 않게 함
+  usePageVisibilityRefetch(fetchData, { enabled: !!profile && !applyMode, debounceMs: 2000 })
 
   const isInRange = (date: string, start: string, end: string) =>
     date >= start && date <= end

@@ -26,7 +26,7 @@ export default function ProfilePage() {
     setBio(profile.bio ?? '')
     setGeneration(String(profile.generation ?? ''))
     setJoinType(profile.join_type ?? 'student')
-    setPhone((profile as any).phone ?? '')
+    setPhone(profile.phone ?? '')
   }, [profile])
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -221,7 +221,7 @@ export default function ProfilePage() {
           },
           {
             label: '전화번호',
-            view: (profile as any).phone || '미등록',
+            view: profile.phone || '미등록',
             edit: <input type="tel" value={phone}
               placeholder="010-0000-0000"
               onChange={e => setPhone(formatPhoneInput(e.target.value))}

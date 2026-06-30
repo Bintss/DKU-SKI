@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Settlement = {
   id: string
@@ -47,7 +48,7 @@ export default function SettlementDetailPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [actionError, setActionError] = useState('')
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!profile) return
     const [{ data: settlementData }, { data: itemData }, { data: settingsData }] = await Promise.all([
       supabase.from('settlements')
@@ -63,29 +64,32 @@ export default function SettlementDetailPage() {
     setItems(itemData ?? [])
     setClubAccount(settingsData ?? null)
     setLoading(false)
-  }
+  }, [profile, id, supabase])
 
   useEffect(() => {
-  if (!profile) return
-  fetchData()
+    if (!profile) return
+    fetchData()
 
-  // Realtime 구독 — 이 정산의 항목 변경 시 자동 재조회
-  const channel = supabase
-    .channel(`settlement-detail-${id}`)
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'settlement_items',
-      filter: `settlement_id=eq.${id}`,
-    }, () => {
-      fetchData()
-    })
-    .subscribe()
+    // Realtime 구독 — 이 정산의 항목 변경 시 자동 재조회
+    const channel = supabase
+      .channel(`settlement-detail-${id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'settlement_items',
+        filter: `settlement_id=eq.${id}`,
+      }, () => {
+        fetchData()
+      })
+      .subscribe()
 
-  return () => {
-    supabase.removeChannel(channel)
-  }
-}, [profile, id])
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [profile, id, fetchData, supabase])
+
+  // Realtime이 못 잡는 케이스(연결 끊김 등) 보완용
+  usePageVisibilityRefetch(fetchData, { enabled: !!profile, debounceMs: 2000 })
 
   const callStatusApi = async (itemId: string, action: string) => {
     setActionLoading(itemId)

@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 type Profile = {
   id: string
@@ -23,8 +24,8 @@ export default function AdminMembersPage() {
   const [search, setSearch] = useState('')
   const router = useRouter()
   const supabase = createClient()
-  
-  const fetchProfiles = async () => {
+
+  const fetchProfiles = useCallback(async () => {
     const { data } = await supabase
       .from('profiles')
       .select('*')
@@ -35,23 +36,26 @@ export default function AdminMembersPage() {
       setMembers(data.filter(p => p.role !== 'pending'))
     }
     setLoading(false)
-  }
+  }, [supabase])
 
   useEffect(() => {
     if (!profile) return
     if (profile.role !== 'admin') { router.push('/home'); return }
     fetchProfiles()
-  }, [profile])
+  }, [profile, router, fetchProfiles])
+
+  // 다른 운영진이 동시에 승인/거절 처리할 수 있으니 탭 복귀 시 재조회
+  usePageVisibilityRefetch(fetchProfiles, { enabled: profile?.role === 'admin', debounceMs: 2000 })
 
   const approve = async (id: string, joinType: string) => {
-  const role = joinType === 'ob' ? 'ob' : 'member'
-  await fetch('/api/admin/update-role', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUserId: id, newRole: role }),
-  })
-  fetchProfiles()
-}
+    const role = joinType === 'ob' ? 'ob' : 'member'
+    await fetch('/api/admin/update-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUserId: id, newRole: role }),
+    })
+    fetchProfiles()
+  }
 
   const reject = async (id: string) => {
     await fetch('/api/admin/reject-user', {
@@ -63,13 +67,13 @@ export default function AdminMembersPage() {
   }
 
   const changeRole = async (id: string, role: string) => {
-  await fetch('/api/admin/update-role', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUserId: id, newRole: role }),
-  })
-  fetchProfiles()
-}
+    await fetch('/api/admin/update-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUserId: id, newRole: role }),
+    })
+    fetchProfiles()
+  }
 
   const filteredMembers = members.filter(m =>
     !search ||
