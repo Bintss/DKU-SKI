@@ -1,17 +1,47 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
 export default function KakaoRegisterPage() {
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
   const [joinType, setJoinType] = useState<'student' | 'ob'>('student')
   const [generation, setGeneration] = useState('')
   const [studentId, setStudentId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [initializing, setInitializing] = useState(true)
   const router = useRouter()
   const supabase = createClient()
+
+  // 카카오에서 가져온 이름을 기본값으로 미리 채워둠
+  useEffect(() => {
+    const fetchInitialName = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.name && profile.name !== '이름없음') {
+        setName(profile.name)
+      }
+      setInitializing(false)
+    }
+    fetchInitialName()
+  }, [])
+
+  const formatPhoneInput = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 11)
+    if (digits.length < 4) return digits
+    if (digits.length < 8) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,6 +54,8 @@ export default function KakaoRegisterPage() {
     const { error } = await supabase
       .from('profiles')
       .update({
+        name,
+        phone: phone || null,
         generation: parseInt(generation),
         join_type: joinType,
         student_id: studentId || null,
@@ -46,6 +78,15 @@ export default function KakaoRegisterPage() {
     color: 'var(--text-primary)',
   }
 
+  if (initializing) {
+    return (
+      <main className="min-h-screen flex items-center justify-center"
+        style={{ background: 'var(--bg-primary)' }}>
+        <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6"
       style={{ background: 'var(--bg-primary)' }}
@@ -63,6 +104,25 @@ export default function KakaoRegisterPage() {
 
       <div className="w-full max-w-sm">
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <input
+            type="text"
+            placeholder="이름"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            className="w-full rounded-2xl px-4 py-3.5 text-sm"
+            style={inputStyle}
+            required
+          />
+
+          <input
+            type="tel"
+            placeholder="전화번호 (010-0000-0000)"
+            value={phone}
+            onChange={e => setPhone(formatPhoneInput(e.target.value))}
+            className="w-full rounded-2xl px-4 py-3.5 text-sm"
+            style={inputStyle}
+          />
+
           {/* 가입 유형 */}
           <div className="flex flex-col gap-2 mb-1">
             {[
