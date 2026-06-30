@@ -44,33 +44,37 @@ export default function KakaoRegisterPage() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+  e.preventDefault()
+  setLoading(true)
+  setError('')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) { router.push('/login'); return }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        name,
-        phone: phone || null,
-        generation: parseInt(generation),
-        join_type: joinType,
-        student_id: studentId || null,
-        role: 'pending',
-      })
-      .eq('id', user.id)
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      name,
+      phone: phone || null,
+      generation: parseInt(generation),
+      join_type: joinType,
+      student_id: studentId || null,
+      role: 'pending',
+    })
+    .eq('id', user.id)
 
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
-    }
-
-    router.push('/pending')
+  if (error) {
+    setError(error.message)
+    setLoading(false)
+    return
   }
+
+  // 운영진에게 알림 발송 (실패해도 가입 자체는 진행)
+  fetch('/api/admin/notify-new-member', { method: 'POST' })
+    .catch(err => console.error('notify error:', err))
+
+  router.push('/pending')
+}
 
   const inputStyle = {
     background: 'var(--bg-secondary)',
