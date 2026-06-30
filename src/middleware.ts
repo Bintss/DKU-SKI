@@ -49,7 +49,8 @@ export async function middleware(request: NextRequest) {
     if (
       profile?.role === 'pending' &&
       !request.nextUrl.pathname.startsWith('/pending') &&
-      !request.nextUrl.pathname.startsWith('/login')
+      !request.nextUrl.pathname.startsWith('/login') &&
+      !request.nextUrl.pathname.startsWith('/register')
     ) {
       return NextResponse.redirect(new URL('/pending', request.url))
     }
