@@ -88,6 +88,19 @@ export default function ProfilePage() {
   router.push('/login')
 }
 
+const handleWithdraw = async () => {
+  if (!confirm('정말 탈퇴하시겠어요? 작성한 글과 정산 기록은 유지되지만, 더 이상 로그인할 수 없어요.')) return
+  if (!confirm('한 번 더 확인할게요. 탈퇴를 진행할까요?')) return
+
+  const res = await fetch('/api/profile/withdraw', { method: 'POST' })
+  if (res.ok) {
+    sessionStorage.removeItem('splash_shown')
+    router.push('/login')
+  } else {
+    alert('탈퇴 처리에 실패했어요. 다시 시도해주세요.')
+  }
+}
+
   const roleLabel: Record<string, string> = {
     member: '부원', ob: 'OB', admin: '운영진', pending: '승인 대기'
   }
@@ -285,15 +298,22 @@ export default function ProfilePage() {
       </div>
 
       {/* 로그아웃 */}
-      <button onClick={handleLogout}
-        className="w-full rounded-2xl py-4 text-sm font-black btn-press"
-        style={{
-          background: 'rgba(255,107,107,0.1)',
-          border: '0.5px solid rgba(255,107,107,0.2)',
-          color: '#FF6B6B',
-        }}>
-        로그아웃
-      </button>
+<button onClick={handleLogout}
+  className="w-full rounded-2xl py-4 text-sm font-black btn-press mb-3"
+  style={{
+    background: 'rgba(255,107,107,0.1)',
+    border: '0.5px solid rgba(255,107,107,0.2)',
+    color: '#FF6B6B',
+  }}>
+  로그아웃
+</button>
+
+{/* 회원 탈퇴 */}
+<button onClick={handleWithdraw}
+  className="w-full rounded-2xl py-3 text-xs font-bold"
+  style={{ color: 'var(--text-hint)' }}>
+  회원 탈퇴
+</button>
     </main>
   )
 }

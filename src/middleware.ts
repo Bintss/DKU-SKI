@@ -46,6 +46,16 @@ export async function middleware(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
+    // 탈퇴한 회원은 강제 로그아웃 후 안내 페이지로
+    if (
+      profile?.role === 'withdrawn' &&
+      !request.nextUrl.pathname.startsWith('/withdrawn') &&
+      !request.nextUrl.pathname.startsWith('/login')
+    ) {
+      await supabase.auth.signOut()
+      return NextResponse.redirect(new URL('/withdrawn', request.url))
+    }
+
     if (
       profile?.role === 'pending' &&
       !request.nextUrl.pathname.startsWith('/pending') &&

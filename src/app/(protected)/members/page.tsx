@@ -31,6 +31,7 @@ export default function MembersPage() {
       .from('profiles')
       .select('id, name, generation, role, join_type, student_id, bio, avatar_url')
       .neq('role', 'pending')
+      .neq('role', 'withdrawn')
       .order('generation', { ascending: false })
       .order('name')
     setMembers(data ?? [])

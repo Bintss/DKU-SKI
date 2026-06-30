@@ -33,7 +33,7 @@ export default function AdminMembersPage() {
 
     if (data) {
       setPending(data.filter(p => p.role === 'pending'))
-      setMembers(data.filter(p => p.role !== 'pending'))
+      setMembers(data.filter(p => p.role !== 'pending' && p.role !== 'withdrawn'))
     }
     setLoading(false)
   }, [supabase])
@@ -44,7 +44,6 @@ export default function AdminMembersPage() {
     fetchProfiles()
   }, [profile, router, fetchProfiles])
 
-  // 다른 운영진이 동시에 승인/거절 처리할 수 있으니 탭 복귀 시 재조회
   usePageVisibilityRefetch(fetchProfiles, { enabled: profile?.role === 'admin', debounceMs: 2000 })
 
   const approve = async (id: string, joinType: string) => {
@@ -71,6 +70,17 @@ export default function AdminMembersPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetUserId: id, newRole: role }),
+    })
+    fetchProfiles()
+  }
+
+  const withdraw = async (id: string, name: string) => {
+    if (!confirm(`${name}님을 탈퇴 처리할까요? 작성한 글/기록은 유지되지만 로그인은 차단돼요.`)) return
+
+    await fetch('/api/admin/withdraw-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUserId: id }),
     })
     fetchProfiles()
   }
@@ -200,14 +210,14 @@ export default function AdminMembersPage() {
           <div className="flex flex-col gap-2">
             {filteredMembers.map(p => (
               <div key={p.id}
-                className="rounded-2xl px-4 py-3.5 flex items-center justify-between gap-4"
+                className="rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3"
                 style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-black flex-shrink-0"
                     style={{ background: 'var(--ski-blue)' }}>
                     {p.name[0]}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
                         {p.name}
@@ -220,24 +230,32 @@ export default function AdminMembersPage() {
                         {roleLabel[p.role]}
                       </span>
                     </div>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                    <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-hint)' }}>
                       {p.generation}기 · {p.join_type === 'ob' ? '졸업생' : '재학생'}
                       {p.student_id && ` · ${p.student_id}`}
                     </p>
                   </div>
                 </div>
-                <select value={p.role} onChange={e => changeRole(p.id, e.target.value)}
-                  className="text-xs font-bold rounded-lg px-2 py-1.5 flex-shrink-0"
-                  style={{
-                    background: 'var(--bg-secondary)',
-                    border: '0.5px solid var(--border-primary)',
-                    color: 'var(--text-secondary)',
-                  }}>
-                  <option value="member">부원</option>
-                  <option value="ob">OB</option>
-                  <option value="admin">운영진</option>
-                  <option value="pending">대기</option>
-                </select>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <select value={p.role} onChange={e => changeRole(p.id, e.target.value)}
+                    className="text-xs font-bold rounded-lg px-2 py-1.5"
+                    style={{
+                      background: 'var(--bg-secondary)',
+                      border: '0.5px solid var(--border-primary)',
+                      color: 'var(--text-secondary)',
+                    }}>
+                    <option value="member">부원</option>
+                    <option value="ob">OB</option>
+                    <option value="admin">운영진</option>
+                    <option value="pending">대기</option>
+                  </select>
+                  <button onClick={() => withdraw(p.id, p.name)}
+                    className="text-xs font-black px-2 py-1.5 rounded-lg"
+                    style={{ background: 'rgba(255,107,107,0.1)', color: '#FF6B6B' }}>
+                    탈퇴
+                  </button>
+                </div>
               </div>
             ))}
           </div>

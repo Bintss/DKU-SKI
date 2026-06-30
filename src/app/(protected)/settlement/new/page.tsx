@@ -50,6 +50,7 @@ export default function NewSettlementPage() {
           .from('profiles')
           .select('id, name, generation, role')
           .neq('role', 'pending')
+          .neq('role', 'withdrawn')
           .order('generation', { ascending: false }),
         supabase.from('club_settings').select('*').eq('id', 1).single(),
       ])
