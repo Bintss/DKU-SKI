@@ -34,14 +34,32 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData()
     const file = formData.get('file') as File
     const season = formData.get('season') as string
+    const password = formData.get('password') as string | null
 
     if (!file || !season) {
       return NextResponse.json({ error: 'file과 season이 필요해요' }, { status: 400 })
     }
 
-    // xlsx 파싱
+    // xlsx 파싱 — 암호화 파일 지원
     const buffer = await file.arrayBuffer()
-    const workbook = XLSX.read(buffer, { type: 'array', password: '' })
+    let workbook: XLSX.WorkBook
+
+    try {
+      workbook = XLSX.read(buffer, {
+        type: 'array',
+        password: password || undefined,
+      })
+    } catch {
+      if (password) {
+        return NextResponse.json({
+          error: '비밀번호가 올바르지 않거나 파일을 읽을 수 없어요'
+        }, { status: 400 })
+      }
+      return NextResponse.json({
+        error: '파일을 읽을 수 없어요. 암호화된 파일이라면 비밀번호를 입력해주세요'
+      }, { status: 400 })
+    }
+
     const sheetName = workbook.SheetNames[0]
     const sheet = workbook.Sheets[sheetName]
     const rows: any[][] = XLSX.utils.sheet_to_json(sheet, {
@@ -49,10 +67,12 @@ export async function POST(req: NextRequest) {
       defval: null,
     })
 
-    // 헤더 행 찾기 (거래 일시가 있는 행)
+    // 헤더 행 찾기
     let headerIdx = -1
     for (let i = 0; i < rows.length; i++) {
-      if (rows[i].includes('거래 일시') || rows[i].includes('거래일시')) {
+      if (rows[i].some((cell: any) =>
+        String(cell ?? '').includes('거래 일시') || String(cell ?? '').includes('거래일시')
+      )) {
         headerIdx = i
         break
       }
@@ -69,7 +89,7 @@ export async function POST(req: NextRequest) {
       type: headers.findIndex(h => h.includes('거래 유형') || h.includes('거래유형')),
       inst: headers.findIndex(h => h.includes('거래 기관') || h.includes('거래기관')),
       amount: headers.findIndex(h => h.includes('거래 금액') || h.includes('거래금액')),
-      balance: headers.findIndex(h => h.includes('거래 후 잔액') || h.includes('잔액')),
+      balance: headers.findIndex(h => h.includes('잔액')),
       memo: headers.findIndex(h => h.includes('메모')),
     }
 
@@ -79,7 +99,6 @@ export async function POST(req: NextRequest) {
     )
 
     const toInsert = []
-    let skipped = 0  // 중복 건수
 
     for (let i = headerIdx + 1; i < rows.length; i++) {
       const row = rows[i]
@@ -134,7 +153,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '파싱된 거래 내역이 없어요' }, { status: 400 })
     }
 
-    // 중복 제거 upsert (같은 season + traded_at + amount는 skip)
     const { data: inserted, error: insertError } = await adminClient
       .from('finance_transactions')
       .upsert(toInsert, {
@@ -149,9 +167,7 @@ export async function POST(req: NextRequest) {
     }
 
     const insertedCount = inserted?.length ?? 0
-    skipped = toInsert.length - insertedCount
-
-    // 집계 결과
+    const skipped = toInsert.length - insertedCount
     const autoClassified = toInsert.filter(r => r.status === 'classified').length
     const autoIgnored = toInsert.filter(r => r.status === 'ignored').length
     const needsClassification = toInsert.filter(r => r.status === 'unclassified').length

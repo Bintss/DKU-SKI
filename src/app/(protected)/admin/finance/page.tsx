@@ -58,6 +58,7 @@ export default function AdminFinancePage() {
   const [uploading, setUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
   const [selectedSeason, setSelectedSeason] = useState(CURRENT_SEASON)
+  const [filePassword, setFilePassword] = useState('')
   const [classifyingId, setClassifyingId] = useState<string | null>(null)
   const [selectedCode, setSelectedCode] = useState('')
   const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(new Set())
@@ -115,6 +116,7 @@ export default function AdminFinancePage() {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('season', selectedSeason)
+    if (filePassword) formData.append('password', filePassword)
 
     const res = await fetch('/api/finance/upload', { method: 'POST', body: formData })
     const result = await res.json()
@@ -134,7 +136,6 @@ export default function AdminFinancePage() {
     const isDeposit = code === '320'
     const isIgnore = code === '999'
 
-    // account_label: 원본 메모의 | 이후 설명 유지, 없으면 코드 기본 라벨
     const memoLabel = tx.memo?.match(/^\d+\|(.+)$/)?.[1] ?? null
     const accountLabel = memoLabel ?? ACCOUNT_CODES[code]?.label ?? ''
 
@@ -322,7 +323,6 @@ export default function AdminFinancePage() {
           </div>
         </div>
 
-        {/* 계정코드 선택 패널 */}
         {isClassifying && (
           <div className="px-4 pb-4 pt-3"
             style={{ borderTop: '0.5px solid var(--border-primary)' }}>
@@ -439,26 +439,45 @@ export default function AdminFinancePage() {
         <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>재무 관리</h1>
       </div>
 
-      {/* 시즌 + 업로드 */}
-      <div className="flex items-center gap-2 mb-5">
-        <select value={selectedSeason} onChange={e => setSelectedSeason(e.target.value)}
-          className="text-sm font-bold rounded-xl px-3 py-2"
-          style={{
-            background: 'var(--bg-card)',
-            border: '0.5px solid var(--border-primary)',
-            color: 'var(--text-secondary)',
-          }}>
-          <option value="2026-27">2026-27</option>
-          <option value="2025-26">2025-26</option>
-        </select>
-        <button onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press disabled:opacity-50"
-          style={{ background: 'var(--ski-blue)' }}>
-          {uploading ? '업로드 중...' : '📁 거래내역 업로드'}
-        </button>
-        <input ref={fileInputRef} type="file" accept=".xlsx,.xls"
-          onChange={handleFileUpload} className="hidden" />
+      {/* 시즌 + 비밀번호 + 업로드 */}
+      <div className="flex flex-col gap-2 mb-5">
+        <div className="flex items-center gap-2">
+          <select value={selectedSeason} onChange={e => setSelectedSeason(e.target.value)}
+            className="text-sm font-bold rounded-xl px-3 py-2 flex-shrink-0"
+            style={{
+              background: 'var(--bg-card)',
+              border: '0.5px solid var(--border-primary)',
+              color: 'var(--text-secondary)',
+            }}>
+            <option value="2026-27">2026-27</option>
+            <option value="2025-26">2025-26</option>
+          </select>
+
+          <input
+            type="password"
+            placeholder="파일 비밀번호 (있는 경우)"
+            value={filePassword}
+            onChange={e => setFilePassword(e.target.value)}
+            className="flex-1 text-sm rounded-xl px-3 py-2"
+            style={{
+              background: 'var(--bg-secondary)',
+              border: '0.5px solid var(--border-primary)',
+              color: 'var(--text-primary)',
+            }}
+          />
+
+          <button onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press disabled:opacity-50 flex-shrink-0"
+            style={{ background: 'var(--ski-blue)' }}>
+            {uploading ? '업로드 중...' : '📁 업로드'}
+          </button>
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls"
+            onChange={handleFileUpload} className="hidden" />
+        </div>
+        <p className="text-xs px-1" style={{ color: 'var(--text-hint)' }}>
+          토스뱅크 거래내역 xlsx 파일을 올려주세요. 암호가 설정된 파일이면 비밀번호를 먼저 입력하세요.
+        </p>
       </div>
 
       {/* 업로드 결과 */}
