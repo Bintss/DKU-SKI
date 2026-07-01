@@ -21,6 +21,7 @@ type FinanceSummary = {
   totalIncome: number
   totalExpense: number
   balance: number
+  lastUpdatedAt: string | null
 }
 
 type Post = {
@@ -38,36 +39,36 @@ const CHANNEL_LABEL: Record<string, string> = {
   free: '자유', student: '재학생', ob: 'OB'
 }
 
-const SEASON = '2026-27' // TODO: club_settings로 이전 예정
+const SEASON = '2026-27'
 
 export default function HomePage() {
   const { profile, loading: profileLoading } = useProfile()
   const supabase = createClient()
 
-  // ── profile과 무관하게 즉시 시작 가능한 공개 데이터 ──
   const [upcomingCamp, setUpcomingCamp] = useState<Camp | null>(null)
   const [finance, setFinance] = useState<FinanceSummary | null>(null)
   const [recentPosts, setRecentPosts] = useState<Post[]>([])
   const [publicLoading, setPublicLoading] = useState(true)
 
-  // ── profile.id가 필요한 개인화 데이터 ──
   const [unreadCount, setUnreadCount] = useState(0)
   const [unpaidCount, setUnpaidCount] = useState(0)
   const [myCampDday, setMyCampDday] = useState<number | null>(null)
-  const [personalLoading, setPersonalLoading] = useState(true)
 
   const fetchPublicData = useCallback(async () => {
     const today = new Date().toISOString().split('T')[0]
 
     const [{ data: campData }, { data: financeData }, { data: postsData }] = await Promise.all([
       supabase.from('camps').select('*').gte('end_date', today).order('start_date').limit(1).single(),
-      supabase.from('finance_transactions')
-  .select('amount, account_code, is_deposit_transfer')
-  .eq('season', SEASON)
-  .eq('status', 'classified')
-  .eq('is_deposit_transfer', false)
-  .not('account_code', 'in', '(999,998)'),
-      supabase.from('posts')
+      supabase
+        .from('finance_transactions')
+        .select('amount, account_code, is_deposit_transfer, traded_at')
+        .eq('season', SEASON)
+        .eq('status', 'classified')
+        .eq('is_deposit_transfer', false)
+        .not('account_code', 'in', '(999,998)')
+        .order('traded_at', { ascending: false }),
+      supabase
+        .from('posts')
         .select('id, title, content, channel, is_anonymous, created_at, profiles(name), comments(id)')
         .order('created_at', { ascending: false })
         .limit(3),
@@ -76,15 +77,20 @@ export default function HomePage() {
     setUpcomingCamp(campData)
 
     if (financeData) {
-  const rows = financeData as { amount: number; account_code: string | null }[]
-  const totalIncome = rows
-    .filter(r => r.account_code && getTransactionType(r.account_code, r.amount) === 'income')
-    .reduce((s, r) => s + r.amount, 0)
-  const totalExpense = rows
-    .filter(r => r.account_code && getTransactionType(r.account_code, r.amount) === 'expense')
-    .reduce((s, r) => s + Math.abs(r.amount), 0)
-  setFinance({ totalIncome, totalExpense, balance: totalIncome - totalExpense })
-}
+      const rows = financeData as { amount: number; account_code: string | null; traded_at: string }[]
+      const totalIncome = rows
+        .filter(r => r.account_code && getTransactionType(r.account_code, r.amount) === 'income')
+        .reduce((s, r) => s + r.amount, 0)
+      const totalExpense = rows
+        .filter(r => r.account_code && getTransactionType(r.account_code, r.amount) === 'expense')
+        .reduce((s, r) => s + Math.abs(r.amount), 0)
+      setFinance({
+        totalIncome,
+        totalExpense,
+        balance: totalIncome - totalExpense,
+        lastUpdatedAt: rows.length > 0 ? rows[0].traded_at : null,
+      })
+    }
 
     const postsWithCount = (postsData ?? []).map((p: any) => ({
       id: p.id,
@@ -97,7 +103,6 @@ export default function HomePage() {
       comment_count: p.comments?.length ?? 0,
     }))
     setRecentPosts(postsWithCount)
-
     setPublicLoading(false)
   }, [supabase])
 
@@ -131,21 +136,10 @@ export default function HomePage() {
     } else {
       setMyCampDday(null)
     }
-
-    setPersonalLoading(false)
   }, [profile, supabase])
 
-  // 공개 데이터는 profile을 기다리지 않고 즉시 시작
-  useEffect(() => {
-    fetchPublicData()
-  }, [fetchPublicData])
-
-  // 개인화 데이터는 profile이 준비된 후 병렬로 시작
-  useEffect(() => {
-    if (profile) fetchPersonalData()
-  }, [profile, fetchPersonalData])
-
-  // 뒤로가기/탭 복귀 시 둘 다 재조회
+  useEffect(() => { fetchPublicData() }, [fetchPublicData])
+  useEffect(() => { if (profile) fetchPersonalData() }, [profile, fetchPersonalData])
   usePageVisibilityRefetch(fetchPublicData)
   usePageVisibilityRefetch(fetchPersonalData, { enabled: !!profile })
 
@@ -177,14 +171,20 @@ export default function HomePage() {
     return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
   }
 
+  const formatLastUpdated = (dateStr: string) => {
+    const d = new Date(dateStr)
+    return d.toLocaleDateString('ko-KR', {
+      month: 'numeric', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }) + ' 기준'
+  }
+
   const getAuthorName = (post: Post) => {
     if (!post.is_anonymous) return post.profiles?.name ?? '알 수 없음'
     if (profile?.role === 'admin') return `${post.profiles?.name} (익명)`
     return '익명'
   }
 
-  // 공개 데이터만 와도 화면 골격을 보여줄 수 있지만,
-  // 인사 카드에 profile.name이 필요하므로 둘 다 기다림 (체감상 큰 차이 없는 선이라 단순함 우선)
   if (profileLoading || publicLoading) return (
     <div className="max-w-lg mx-auto pt-4">
       <SkeletonHome />
@@ -193,7 +193,7 @@ export default function HomePage() {
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      {/* 인사 카드 — 클릭 시 프로필로 이동 */}
+      {/* 인사 카드 */}
       <a href="/profile"
         className="fade-slide-up delay-1 block rounded-2xl px-6 py-5 mb-4 relative overflow-hidden card-hover btn-press"
         style={{
@@ -270,8 +270,15 @@ export default function HomePage() {
           className="fade-slide-up delay-3 block rounded-2xl p-5 mb-5 card-hover btn-press"
           style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-xs font-black tracking-widest uppercase"
-              style={{ color: 'var(--text-tertiary)' }}>{SEASON} 재무 현황</p>
+            <div>
+              <p className="text-xs font-black tracking-widest uppercase"
+                style={{ color: 'var(--text-tertiary)' }}>{SEASON} 재무 현황</p>
+              {finance.lastUpdatedAt && (
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                  {formatLastUpdated(finance.lastUpdatedAt)}
+                </p>
+              )}
+            </div>
             <span className="text-xs font-bold" style={{ color: 'var(--text-hint)' }}>자세히 →</span>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -299,14 +306,14 @@ export default function HomePage() {
             style={{ background: 'rgba(255,255,255,0.06)' }}>
             <div className="h-full rounded-full"
               style={{
-                width: `${Math.min((finance.totalExpense / finance.totalIncome) * 100 || 0, 100)}%`,
+                width: `${Math.min(finance.totalIncome > 0 ? (finance.totalExpense / finance.totalIncome) * 100 : 0, 100)}%`,
                 background: 'var(--ski-blue)',
               }} />
           </div>
         </a>
       )}
 
-      {/* 메뉴 그리드 — 공지/행사/동문/정산 */}
+      {/* 메뉴 그리드 */}
       <div className="fade-slide-up delay-4 grid grid-cols-4 gap-2 mb-5">
         {[
           {
@@ -359,7 +366,7 @@ export default function HomePage() {
         ))}
       </div>
 
-      {/* 커뮤니티 미리보기 카드 */}
+      {/* 커뮤니티 미리보기 */}
       <div className="fade-slide-up delay-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-black tracking-widest uppercase"
@@ -406,7 +413,8 @@ export default function HomePage() {
                     {post.content}
                   </p>
                   {post.comment_count > 0 && (
-                    <span className="text-xs font-bold ml-2 flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                    <span className="text-xs font-bold ml-2 flex-shrink-0"
+                      style={{ color: 'var(--text-hint)' }}>
                       댓글 {post.comment_count}
                     </span>
                   )}

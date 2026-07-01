@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useProfile } from '@/contexts/ProfileContext'
+import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 import { ACCOUNT_CODES, getTransactionType } from '@/lib/finance-codes'
 
 type AccountSummary = {
@@ -31,11 +32,12 @@ type Transaction = {
 const CURRENT_SEASON = '2026-27'
 
 export default function FinancePage() {
-  const { loading: profileLoading } = useProfile()
+  const { profile, loading: profileLoading } = useProfile()
   const [season, setSeason] = useState(CURRENT_SEASON)
   const [summary, setSummary] = useState<AccountSummary[]>([])
   const [depositAccounts, setDepositAccounts] = useState<DepositAccount[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [txOpen, setTxOpen] = useState(false)
   const [filterCode, setFilterCode] = useState<string | null>(null)
@@ -50,7 +52,6 @@ export default function FinancePage() {
         .select('id, traded_at, description, amount, account_code, account_label, is_deposit_transfer')
         .eq('season', season)
         .eq('status', 'classified')
-        .eq('is_deposit_transfer', false)
         .not('account_code', 'in', '(999,998)')
         .order('traded_at', { ascending: false }),
       supabase
@@ -60,40 +61,62 @@ export default function FinancePage() {
         .order('name'),
     ])
 
-    setTransactions(txData ?? [])
+    const allTx = txData ?? []
+
+    // 마지막 거래 기준일시 (전체 중 가장 최근)
+    if (allTx.length > 0) {
+      setLastUpdatedAt(allTx[0].traded_at)
+    } else {
+      setLastUpdatedAt(null)
+    }
+
+    // is_deposit_transfer 제외한 거래만 공시용으로 사용
+    const displayTx = allTx.filter(tx => !tx.is_deposit_transfer)
+    setTransactions(displayTx)
     setDepositAccounts(depositData ?? [])
 
-    // 계정코드별 집계
+    // 계정코드별 집계 — 140(사업운영)은 수입/지출 분리
     const grouped: Record<string, AccountSummary> = {}
-    for (const tx of txData ?? []) {
+
+    for (const tx of displayTx) {
       if (!tx.account_code) continue
       const code = tx.account_code
       const txType = getTransactionType(code, tx.amount)
       if (txType === 'ignore' || txType === 'deposit') continue
 
-      if (!grouped[code]) {
-        grouped[code] = {
+      const actualType: 'income' | 'expense' = txType === 'income' ? 'income' : 'expense'
+
+      // 140은 수입/지출을 별도 키로 분리
+      const groupKey = code === '140' ? `140_${actualType}` : code
+
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = {
           code,
-          label: ACCOUNT_CODES[code]?.label ?? tx.account_label ?? code,
+          label: code === '140'
+            ? (actualType === 'income' ? '사업운영 (수입)' : '사업운영 (지출)')
+            : (ACCOUNT_CODES[code]?.label ?? tx.account_label ?? code),
           amount: 0,
-          type: txType === 'income' ? 'income' : 'expense',
+          type: actualType,
           count: 0,
         }
       }
-      grouped[code].amount += tx.amount
-      grouped[code].count += 1
+      grouped[groupKey].amount += tx.amount
+      grouped[groupKey].count += 1
     }
 
-    setSummary(Object.values(grouped).sort((a, b) =>
-      a.type === b.type ? Math.abs(b.amount) - Math.abs(a.amount) : a.type === 'income' ? -1 : 1
-    ))
+    setSummary(
+      Object.values(grouped).sort((a, b) =>
+        a.type === b.type
+          ? Math.abs(b.amount) - Math.abs(a.amount)
+          : a.type === 'income' ? -1 : 1
+      )
+    )
 
     setLoading(false)
   }, [supabase, season])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+  useEffect(() => { fetchData() }, [fetchData])
+  usePageVisibilityRefetch(fetchData, { enabled: true, debounceMs: 5000 })
 
   const totalIncome = summary
     .filter(s => s.type === 'income')
@@ -110,9 +133,33 @@ export default function FinancePage() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('ko-KR').format(Math.abs(n)) + '원'
 
+  const formatLastUpdated = (dateStr: string) => {
+    const d = new Date(dateStr)
+    return d.toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }) + ' 기준'
+  }
+
+  // 필터 키 계산 — 140은 수입/지출 분리키 사용
+  const getFilterKey = (s: AccountSummary) =>
+    s.code === '140' ? `140_${s.type}` : s.code
+
+  // 거래 내역 필터링 — 140_income/140_expense 분기 처리
   const filteredTx = filterCode
-    ? transactions.filter(tx => tx.account_code === filterCode)
+    ? transactions.filter(tx => {
+        if (filterCode === '140_income') return tx.account_code === '140' && tx.amount >= 0
+        if (filterCode === '140_expense') return tx.account_code === '140' && tx.amount < 0
+        return tx.account_code === filterCode
+      })
     : transactions
+
+  const filteredLabel = filterCode
+    ? summary.find(s => getFilterKey(s) === filterCode)?.label ?? filterCode
+    : null
 
   if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -123,14 +170,19 @@ export default function FinancePage() {
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       {/* 헤더 */}
-      <div className="flex items-end justify-between mb-6">
+      <div className="flex items-start justify-between mb-6">
         <div>
           <p className="text-xs font-black tracking-widest uppercase mb-1"
             style={{ color: 'var(--text-hint)' }}>Finance</p>
           <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>재무 공시</h1>
+          {lastUpdatedAt && (
+            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
+              {formatLastUpdated(lastUpdatedAt)}
+            </p>
+          )}
         </div>
-        <select value={season} onChange={e => setSeason(e.target.value)}
-          className="text-xs font-bold rounded-xl px-3 py-2"
+        <select value={season} onChange={e => { setSeason(e.target.value); setFilterCode(null) }}
+          className="text-xs font-bold rounded-xl px-3 py-2 flex-shrink-0"
           style={{
             background: 'var(--bg-card)',
             border: '0.5px solid var(--border-primary)',
@@ -149,6 +201,7 @@ export default function FinancePage() {
         }}>
         <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
           style={{ background: 'white', transform: 'translate(30%,-30%)' }} />
+
         <p className="text-xs font-black tracking-widest uppercase mb-4"
           style={{ color: 'rgba(255,255,255,0.4)' }}>{season} 시즌</p>
 
@@ -175,7 +228,7 @@ export default function FinancePage() {
         </div>
 
         {totalDeposit > 0 && (
-          <div className="rounded-xl p-3"
+          <div className="rounded-xl p-3 mb-4"
             style={{ background: 'rgba(255,255,255,0.1)' }}>
             <div className="flex items-center justify-between mb-1">
               <p className="text-xs font-black" style={{ color: 'rgba(255,255,255,0.6)' }}>
@@ -191,7 +244,7 @@ export default function FinancePage() {
           </div>
         )}
 
-        <div className="mt-4 h-1 rounded-full overflow-hidden"
+        <div className="h-1 rounded-full overflow-hidden"
           style={{ background: 'rgba(255,255,255,0.15)' }}>
           <div className="h-full rounded-full"
             style={{
@@ -216,8 +269,7 @@ export default function FinancePage() {
                 <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                   {acc.name}
                 </span>
-                <span className="text-sm font-black"
-                  style={{ color: 'var(--accent-blue)' }}>
+                <span className="text-sm font-black" style={{ color: 'var(--accent-blue)' }}>
                   {fmt(acc.balance)}
                 </span>
               </div>
@@ -236,39 +288,43 @@ export default function FinancePage() {
           {/* 수입 */}
           {summary.filter(s => s.type === 'income').length > 0 && (
             <div className="mb-4">
-              <p className="text-xs font-black mb-2" style={{ color: 'var(--accent-blue)' }}>
+              <p className="text-xs font-black mb-3" style={{ color: 'var(--accent-blue)' }}>
                 수입
               </p>
               <div className="flex flex-col gap-3">
-                {summary.filter(s => s.type === 'income').map(s => (
-                  <button key={s.code} type="button"
-                    onClick={() => {
-                      setFilterCode(filterCode === s.code ? null : s.code)
-                      setTxOpen(true)
-                    }}
-                    className="w-full text-left">
-                    <div className="flex justify-between text-sm mb-1.5">
-                      <span className="font-semibold flex items-center gap-1.5"
-                        style={{ color: filterCode === s.code ? 'var(--accent-blue)' : 'var(--text-secondary)' }}>
-                        {s.label}
-                        <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                          {s.count}건
+                {summary.filter(s => s.type === 'income').map(s => {
+                  const fk = getFilterKey(s)
+                  const isActive = filterCode === fk
+                  return (
+                    <button key={fk} type="button"
+                      onClick={() => {
+                        setFilterCode(isActive ? null : fk)
+                        setTxOpen(true)
+                      }}
+                      className="w-full text-left">
+                      <div className="flex justify-between text-sm mb-1.5">
+                        <span className="font-semibold flex items-center gap-1.5"
+                          style={{ color: isActive ? 'var(--accent-blue)' : 'var(--text-secondary)' }}>
+                          {s.label}
+                          <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                            {s.count}건
+                          </span>
                         </span>
-                      </span>
-                      <span className="font-black" style={{ color: 'var(--accent-blue)' }}>
-                        +{fmt(s.amount)}
-                      </span>
-                    </div>
-                    <div className="h-1 rounded-full overflow-hidden"
-                      style={{ background: 'rgba(255,255,255,0.06)' }}>
-                      <div className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${totalIncome > 0 ? (s.amount / totalIncome) * 100 : 0}%`,
-                          background: filterCode === s.code ? 'var(--ski-blue)' : 'rgba(27,63,171,0.5)',
-                        }} />
-                    </div>
-                  </button>
-                ))}
+                        <span className="font-black" style={{ color: 'var(--accent-blue)' }}>
+                          +{fmt(s.amount)}
+                        </span>
+                      </div>
+                      <div className="h-1 rounded-full overflow-hidden"
+                        style={{ background: 'rgba(255,255,255,0.06)' }}>
+                        <div className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${totalIncome > 0 ? (s.amount / totalIncome) * 100 : 0}%`,
+                            background: isActive ? 'var(--ski-blue)' : 'rgba(27,63,171,0.5)',
+                          }} />
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -276,39 +332,43 @@ export default function FinancePage() {
           {/* 지출 */}
           {summary.filter(s => s.type === 'expense').length > 0 && (
             <div>
-              <p className="text-xs font-black mb-2" style={{ color: '#F09595' }}>
+              <p className="text-xs font-black mb-3" style={{ color: '#F09595' }}>
                 지출
               </p>
               <div className="flex flex-col gap-3">
-                {summary.filter(s => s.type === 'expense').map(s => (
-                  <button key={s.code} type="button"
-                    onClick={() => {
-                      setFilterCode(filterCode === s.code ? null : s.code)
-                      setTxOpen(true)
-                    }}
-                    className="w-full text-left">
-                    <div className="flex justify-between text-sm mb-1.5">
-                      <span className="font-semibold flex items-center gap-1.5"
-                        style={{ color: filterCode === s.code ? '#F09595' : 'var(--text-secondary)' }}>
-                        {s.label}
-                        <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                          {s.count}건
+                {summary.filter(s => s.type === 'expense').map(s => {
+                  const fk = getFilterKey(s)
+                  const isActive = filterCode === fk
+                  return (
+                    <button key={fk} type="button"
+                      onClick={() => {
+                        setFilterCode(isActive ? null : fk)
+                        setTxOpen(true)
+                      }}
+                      className="w-full text-left">
+                      <div className="flex justify-between text-sm mb-1.5">
+                        <span className="font-semibold flex items-center gap-1.5"
+                          style={{ color: isActive ? '#F09595' : 'var(--text-secondary)' }}>
+                          {s.label}
+                          <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                            {s.count}건
+                          </span>
                         </span>
-                      </span>
-                      <span className="font-black" style={{ color: '#F09595' }}>
-                        -{fmt(Math.abs(s.amount))}
-                      </span>
-                    </div>
-                    <div className="h-1 rounded-full overflow-hidden"
-                      style={{ background: 'rgba(255,255,255,0.06)' }}>
-                      <div className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${totalExpense > 0 ? (Math.abs(s.amount) / totalExpense) * 100 : 0}%`,
-                          background: filterCode === s.code ? '#F09595' : 'rgba(240,149,149,0.4)',
-                        }} />
-                    </div>
-                  </button>
-                ))}
+                        <span className="font-black" style={{ color: '#F09595' }}>
+                          -{fmt(Math.abs(s.amount))}
+                        </span>
+                      </div>
+                      <div className="h-1 rounded-full overflow-hidden"
+                        style={{ background: 'rgba(255,255,255,0.06)' }}>
+                        <div className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${totalExpense > 0 ? (Math.abs(s.amount) / totalExpense) * 100 : 0}%`,
+                            background: isActive ? '#F09595' : 'rgba(240,149,149,0.4)',
+                          }} />
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -318,14 +378,15 @@ export default function FinancePage() {
       {/* 거래 내역 */}
       <div className="rounded-2xl overflow-hidden"
         style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-        <button onClick={() => { setTxOpen(!txOpen); if (txOpen) setFilterCode(null) }}
+        <button
+          onClick={() => { setTxOpen(!txOpen); if (txOpen) setFilterCode(null) }}
           className="w-full px-5 py-4 flex items-center justify-between">
           <h2 className="text-xs font-black tracking-widest uppercase"
             style={{ color: 'var(--text-hint)' }}>
             거래 내역
             <span className="ml-2 font-black" style={{ color: 'var(--text-tertiary)' }}>
-              {filterCode
-                ? `${ACCOUNT_CODES[filterCode]?.label ?? filterCode} · ${filteredTx.length}건`
+              {filteredLabel
+                ? `${filteredLabel} · ${filteredTx.length}건`
                 : `${transactions.length}건`}
             </span>
           </h2>
@@ -355,7 +416,6 @@ export default function FinancePage() {
                 const code = tx.account_code
                 const txType = code ? getTransactionType(code, tx.amount) : null
                 const isIncome = txType === 'income'
-
                 return (
                   <div key={tx.id}
                     className="flex items-center gap-3 px-5 py-3.5"
@@ -371,7 +431,8 @@ export default function FinancePage() {
                       </p>
                       <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
                         {new Date(tx.traded_at).toLocaleDateString('ko-KR', {
-                          month: 'numeric', day: 'numeric'
+                          month: 'numeric', day: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
                         })}
                         {tx.account_label && ` · ${tx.account_label}`}
                       </p>
