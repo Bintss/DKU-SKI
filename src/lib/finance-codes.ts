@@ -18,7 +18,6 @@ export const ACCOUNT_CODES: Record<string, {
   '999': { label: '미분류',     type: 'ignore',  description: '착오송금정리 등 무시해도 되는 거래' },
 }
 
-// 140은 거래 방향에 따라 income/expense가 갈림
 export function getTransactionType(
   code: string,
   amount: number
@@ -27,9 +26,9 @@ export function getTransactionType(
   if (!entry) return 'expense'
   if (entry.type === 'ignore') return 'ignore'
   if (entry.type === 'deposit') return 'deposit'
-  // 140(사업운영)은 금액 부호로 판단
-  if (code === '140') return amount >= 0 ? 'income' : 'expense'
-  return entry.type
+  // 모든 코드에서 금액 부호 우선
+  // 양수 → 수입, 음수 → 지출 (140뿐 아니라 110/120 환불도 동일하게 처리)
+  return amount >= 0 ? 'income' : 'expense'
 }
 
 // 예치금 계좌 이름 파싱 (예: '320|단기예치금-모임금고' → '모임금고')
