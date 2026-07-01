@@ -13,8 +13,8 @@ export default function SplashScreen() {
     >
       <style>{`
         @keyframes splashFadeOut {
-          0% { opacity: 1; }
-          70% { opacity: 1; }
+          0%   { opacity: 1; }
+          70%  { opacity: 1; }
           100% { opacity: 0; visibility: hidden; }
         }
       `}</style>
