@@ -1,56 +1,118 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useProfile } from '@/contexts/ProfileContext'
+import { ACCOUNT_CODES, getTransactionType } from '@/lib/finance-codes'
 
-type Finance = {
+type AccountSummary = {
+  code: string
+  label: string
+  amount: number
+  type: 'income' | 'expense'
+  count: number
+}
+
+type DepositAccount = {
+  name: string
+  balance: number
+}
+
+type Transaction = {
   id: string
-  season: string
-  date: string
-  category: string
+  traded_at: string
   description: string
   amount: number
-  type: string
+  account_code: string | null
+  account_label: string | null
+  is_deposit_transfer: boolean
 }
+
+const CURRENT_SEASON = '2026-27'
 
 export default function FinancePage() {
   const { loading: profileLoading } = useProfile()
-  const [records, setRecords] = useState<Finance[]>([])
-  const [season, setSeason] = useState('2026-27')
+  const [season, setSeason] = useState(CURRENT_SEASON)
+  const [summary, setSummary] = useState<AccountSummary[]>([])
+  const [depositAccounts, setDepositAccounts] = useState<DepositAccount[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [txOpen, setTxOpen] = useState(false)
+  const [filterCode, setFilterCode] = useState<string | null>(null)
   const supabase = createClient()
 
-  useEffect(() => {
-    const fetchFinance = async () => {
-      setLoading(true)
-      const { data } = await supabase
-        .from('finance')
-        .select('*')
-        .eq('season', season)
-        .order('date', { ascending: false })
-      setRecords(data ?? [])
-      setLoading(false)
-    }
-    fetchFinance()
-  }, [season])
+  const fetchData = useCallback(async () => {
+    setLoading(true)
 
-  const totalIncome = records.filter(r => r.type === 'income')
-    .reduce((s, r) => s + r.amount, 0)
-  const totalExpense = records.filter(r => r.type === 'expense')
-    .reduce((s, r) => s + Math.abs(r.amount), 0)
+    const [{ data: txData }, { data: depositData }] = await Promise.all([
+      supabase
+        .from('finance_transactions')
+        .select('id, traded_at, description, amount, account_code, account_label, is_deposit_transfer')
+        .eq('season', season)
+        .eq('status', 'classified')
+        .eq('is_deposit_transfer', false)
+        .not('account_code', 'in', '(999,998)')
+        .order('traded_at', { ascending: false }),
+      supabase
+        .from('deposit_accounts')
+        .select('name, balance')
+        .eq('season', season)
+        .order('name'),
+    ])
+
+    setTransactions(txData ?? [])
+    setDepositAccounts(depositData ?? [])
+
+    // 계정코드별 집계
+    const grouped: Record<string, AccountSummary> = {}
+    for (const tx of txData ?? []) {
+      if (!tx.account_code) continue
+      const code = tx.account_code
+      const txType = getTransactionType(code, tx.amount)
+      if (txType === 'ignore' || txType === 'deposit') continue
+
+      if (!grouped[code]) {
+        grouped[code] = {
+          code,
+          label: ACCOUNT_CODES[code]?.label ?? tx.account_label ?? code,
+          amount: 0,
+          type: txType === 'income' ? 'income' : 'expense',
+          count: 0,
+        }
+      }
+      grouped[code].amount += tx.amount
+      grouped[code].count += 1
+    }
+
+    setSummary(Object.values(grouped).sort((a, b) =>
+      a.type === b.type ? Math.abs(b.amount) - Math.abs(a.amount) : a.type === 'income' ? -1 : 1
+    ))
+
+    setLoading(false)
+  }, [supabase, season])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  const totalIncome = summary
+    .filter(s => s.type === 'income')
+    .reduce((sum, s) => sum + s.amount, 0)
+
+  const totalExpense = summary
+    .filter(s => s.type === 'expense')
+    .reduce((sum, s) => sum + Math.abs(s.amount), 0)
+
   const balance = totalIncome - totalExpense
+  const totalDeposit = depositAccounts.reduce((s, a) => s + a.balance, 0)
+  const totalAsset = balance + totalDeposit
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('ko-KR').format(Math.abs(n)) + '원'
 
-  const categoryExpense = records
-    .filter(r => r.type === 'expense')
-    .reduce((acc, r) => {
-      acc[r.category] = (acc[r.category] ?? 0) + Math.abs(r.amount)
-      return acc
-    }, {} as Record<string, number>)
+  const filteredTx = filterCode
+    ? transactions.filter(tx => tx.account_code === filterCode)
+    : transactions
 
   if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -88,10 +150,9 @@ export default function FinancePage() {
         <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
           style={{ background: 'white', transform: 'translate(30%,-30%)' }} />
         <p className="text-xs font-black tracking-widest uppercase mb-4"
-          style={{ color: 'rgba(255,255,255,0.4)' }}>
-          {season} 시즌
-        </p>
-        <div className="grid grid-cols-3 gap-4">
+          style={{ color: 'rgba(255,255,255,0.4)' }}>{season} 시즌</p>
+
+        <div className="grid grid-cols-3 gap-4 mb-4">
           <div>
             <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>수입</p>
             <p className="text-lg font-black text-white">
@@ -112,99 +173,216 @@ export default function FinancePage() {
             </p>
           </div>
         </div>
+
+        {totalDeposit > 0 && (
+          <div className="rounded-xl p-3"
+            style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-black" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                예치금 포함 총 자산
+              </p>
+              <p className="text-base font-black text-white">
+                {(totalAsset / 10000).toFixed(0)}만원
+              </p>
+            </div>
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              예치금 {(totalDeposit / 10000).toFixed(0)}만원 포함
+            </p>
+          </div>
+        )}
+
         <div className="mt-4 h-1 rounded-full overflow-hidden"
           style={{ background: 'rgba(255,255,255,0.15)' }}>
           <div className="h-full rounded-full"
             style={{
-              width: `${Math.min((totalExpense / totalIncome) * 100 || 0, 100)}%`,
+              width: `${Math.min(totalIncome > 0 ? (totalExpense / totalIncome) * 100 : 0, 100)}%`,
               background: 'rgba(255,255,255,0.6)',
             }} />
         </div>
         <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
-          예산 집행률 {Math.round((totalExpense / totalIncome) * 100) || 0}%
+          예산 집행률 {totalIncome > 0 ? Math.round((totalExpense / totalIncome) * 100) : 0}%
         </p>
       </div>
 
-      {/* 항목별 지출 */}
-      {Object.keys(categoryExpense).length > 0 && (
+      {/* 예치금 현황 */}
+      {depositAccounts.length > 0 && (
         <div className="rounded-2xl p-5 mb-4"
           style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-          <h2 className="text-xs font-black tracking-widest uppercase mb-4"
-            style={{ color: 'var(--text-hint)' }}>항목별 지출</h2>
-          <div className="flex flex-col gap-4">
-            {Object.entries(categoryExpense)
-              .sort(([, a], [, b]) => b - a)
-              .map(([cat, amount]) => (
-                <div key={cat}>
-                  <div className="flex justify-between text-sm mb-1.5">
-                    <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                      {cat}
-                    </span>
-                    <span className="font-black" style={{ color: 'var(--text-primary)' }}>
-                      {fmt(amount)}
-                    </span>
-                  </div>
-                  <div className="h-1 rounded-full overflow-hidden"
-                    style={{ background: 'rgba(255,255,255,0.06)' }}>
-                    <div className="h-full rounded-full"
-                      style={{
-                        width: `${(amount / totalExpense) * 100}%`,
-                        background: 'var(--ski-blue)',
-                      }} />
-                  </div>
-                </div>
-              ))}
+          <h2 className="text-xs font-black tracking-widest uppercase mb-3"
+            style={{ color: 'var(--text-hint)' }}>예치금 현황</h2>
+          <div className="flex flex-col gap-2">
+            {depositAccounts.map(acc => (
+              <div key={acc.name} className="flex items-center justify-between">
+                <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  {acc.name}
+                </span>
+                <span className="text-sm font-black"
+                  style={{ color: 'var(--accent-blue)' }}>
+                  {fmt(acc.balance)}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* 거래 내역 토글 */}
+      {/* 항목별 내역 */}
+      {summary.length > 0 && (
+        <div className="rounded-2xl p-5 mb-4"
+          style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+          <h2 className="text-xs font-black tracking-widest uppercase mb-4"
+            style={{ color: 'var(--text-hint)' }}>항목별 내역</h2>
+
+          {/* 수입 */}
+          {summary.filter(s => s.type === 'income').length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-black mb-2" style={{ color: 'var(--accent-blue)' }}>
+                수입
+              </p>
+              <div className="flex flex-col gap-3">
+                {summary.filter(s => s.type === 'income').map(s => (
+                  <button key={s.code} type="button"
+                    onClick={() => {
+                      setFilterCode(filterCode === s.code ? null : s.code)
+                      setTxOpen(true)
+                    }}
+                    className="w-full text-left">
+                    <div className="flex justify-between text-sm mb-1.5">
+                      <span className="font-semibold flex items-center gap-1.5"
+                        style={{ color: filterCode === s.code ? 'var(--accent-blue)' : 'var(--text-secondary)' }}>
+                        {s.label}
+                        <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                          {s.count}건
+                        </span>
+                      </span>
+                      <span className="font-black" style={{ color: 'var(--accent-blue)' }}>
+                        +{fmt(s.amount)}
+                      </span>
+                    </div>
+                    <div className="h-1 rounded-full overflow-hidden"
+                      style={{ background: 'rgba(255,255,255,0.06)' }}>
+                      <div className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${totalIncome > 0 ? (s.amount / totalIncome) * 100 : 0}%`,
+                          background: filterCode === s.code ? 'var(--ski-blue)' : 'rgba(27,63,171,0.5)',
+                        }} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 지출 */}
+          {summary.filter(s => s.type === 'expense').length > 0 && (
+            <div>
+              <p className="text-xs font-black mb-2" style={{ color: '#F09595' }}>
+                지출
+              </p>
+              <div className="flex flex-col gap-3">
+                {summary.filter(s => s.type === 'expense').map(s => (
+                  <button key={s.code} type="button"
+                    onClick={() => {
+                      setFilterCode(filterCode === s.code ? null : s.code)
+                      setTxOpen(true)
+                    }}
+                    className="w-full text-left">
+                    <div className="flex justify-between text-sm mb-1.5">
+                      <span className="font-semibold flex items-center gap-1.5"
+                        style={{ color: filterCode === s.code ? '#F09595' : 'var(--text-secondary)' }}>
+                        {s.label}
+                        <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                          {s.count}건
+                        </span>
+                      </span>
+                      <span className="font-black" style={{ color: '#F09595' }}>
+                        -{fmt(Math.abs(s.amount))}
+                      </span>
+                    </div>
+                    <div className="h-1 rounded-full overflow-hidden"
+                      style={{ background: 'rgba(255,255,255,0.06)' }}>
+                      <div className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${totalExpense > 0 ? (Math.abs(s.amount) / totalExpense) * 100 : 0}%`,
+                          background: filterCode === s.code ? '#F09595' : 'rgba(240,149,149,0.4)',
+                        }} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 거래 내역 */}
       <div className="rounded-2xl overflow-hidden"
         style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-        <button onClick={() => setTxOpen(!txOpen)}
+        <button onClick={() => { setTxOpen(!txOpen); if (txOpen) setFilterCode(null) }}
           className="w-full px-5 py-4 flex items-center justify-between">
           <h2 className="text-xs font-black tracking-widest uppercase"
             style={{ color: 'var(--text-hint)' }}>
             거래 내역
             <span className="ml-2 font-black" style={{ color: 'var(--text-tertiary)' }}>
-              {records.length}건
+              {filterCode
+                ? `${ACCOUNT_CODES[filterCode]?.label ?? filterCode} · ${filteredTx.length}건`
+                : `${transactions.length}건`}
             </span>
           </h2>
-          <span className="text-xs font-bold" style={{ color: 'var(--text-hint)' }}>
-            {txOpen ? '접기' : '펼치기'}
-          </span>
+          <div className="flex items-center gap-2">
+            {filterCode && (
+              <button type="button"
+                onClick={e => { e.stopPropagation(); setFilterCode(null) }}
+                className="text-xs font-black px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-hint)' }}>
+                필터 해제
+              </button>
+            )}
+            <span className="text-xs font-bold" style={{ color: 'var(--text-hint)' }}>
+              {txOpen ? '접기' : '펼치기'}
+            </span>
+          </div>
         </button>
 
         {txOpen && (
           <div style={{ borderTop: '0.5px solid var(--border-primary)' }}>
-            {records.length === 0 ? (
+            {filteredTx.length === 0 ? (
               <p className="text-sm text-center py-10" style={{ color: 'var(--text-hint)' }}>
                 거래 내역이 없어요
               </p>
             ) : (
-              records.map((r, i) => (
-                <div key={r.id}
-                  className="flex items-center gap-3 px-5 py-3.5"
-                  style={{
-                    borderBottom: i !== records.length - 1
-                      ? '0.5px solid var(--border-primary)' : 'none'
-                  }}>
-                  <div className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ background: r.type === 'income' ? 'var(--accent-blue)' : '#F09595' }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
-                      {r.description}
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                      {r.date} · {r.category}
+              filteredTx.map((tx, i) => {
+                const code = tx.account_code
+                const txType = code ? getTransactionType(code, tx.amount) : null
+                const isIncome = txType === 'income'
+
+                return (
+                  <div key={tx.id}
+                    className="flex items-center gap-3 px-5 py-3.5"
+                    style={{
+                      borderBottom: i !== filteredTx.length - 1
+                        ? '0.5px solid var(--border-primary)' : 'none'
+                    }}>
+                    <div className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ background: isIncome ? 'var(--accent-blue)' : '#F09595' }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
+                        {tx.description}
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                        {new Date(tx.traded_at).toLocaleDateString('ko-KR', {
+                          month: 'numeric', day: 'numeric'
+                        })}
+                        {tx.account_label && ` · ${tx.account_label}`}
+                      </p>
+                    </div>
+                    <p className="text-sm font-black flex-shrink-0"
+                      style={{ color: isIncome ? 'var(--accent-blue)' : '#F09595' }}>
+                      {isIncome ? '+' : '-'}{fmt(tx.amount)}
                     </p>
                   </div>
-                  <p className="text-sm font-black flex-shrink-0"
-                    style={{ color: r.type === 'income' ? 'var(--accent-blue)' : '#F09595' }}>
-                    {r.type === 'income' ? '+' : '-'}{fmt(r.amount)}
-                  </p>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         )}

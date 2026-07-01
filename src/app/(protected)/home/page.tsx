@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { SkeletonHome } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
 import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
+import { getTransactionType } from '@/lib/finance-codes'
 
 type Camp = {
   id: string
@@ -21,8 +22,6 @@ type FinanceSummary = {
   totalExpense: number
   balance: number
 }
-
-type FinanceRow = { amount: number; type: string }
 
 type Post = {
   id: string
@@ -62,7 +61,12 @@ export default function HomePage() {
 
     const [{ data: campData }, { data: financeData }, { data: postsData }] = await Promise.all([
       supabase.from('camps').select('*').gte('end_date', today).order('start_date').limit(1).single(),
-      supabase.from('finance').select('amount, type').eq('season', SEASON),
+      supabase.from('finance_transactions')
+  .select('amount, account_code, is_deposit_transfer')
+  .eq('season', SEASON)
+  .eq('status', 'classified')
+  .eq('is_deposit_transfer', false)
+  .not('account_code', 'in', '(999,998)'),
       supabase.from('posts')
         .select('id, title, content, channel, is_anonymous, created_at, profiles(name), comments(id)')
         .order('created_at', { ascending: false })
@@ -72,11 +76,15 @@ export default function HomePage() {
     setUpcomingCamp(campData)
 
     if (financeData) {
-      const rows = financeData as FinanceRow[]
-      const totalIncome = rows.filter(r => r.type === 'income').reduce((s, r) => s + r.amount, 0)
-      const totalExpense = rows.filter(r => r.type === 'expense').reduce((s, r) => s + Math.abs(r.amount), 0)
-      setFinance({ totalIncome, totalExpense, balance: totalIncome - totalExpense })
-    }
+  const rows = financeData as { amount: number; account_code: string | null }[]
+  const totalIncome = rows
+    .filter(r => r.account_code && getTransactionType(r.account_code, r.amount) === 'income')
+    .reduce((s, r) => s + r.amount, 0)
+  const totalExpense = rows
+    .filter(r => r.account_code && getTransactionType(r.account_code, r.amount) === 'expense')
+    .reduce((s, r) => s + Math.abs(r.amount), 0)
+  setFinance({ totalIncome, totalExpense, balance: totalIncome - totalExpense })
+}
 
     const postsWithCount = (postsData ?? []).map((p: any) => ({
       id: p.id,
