@@ -1,85 +1,137 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Inter:wght@400;500;700;800&display=swap');
 
 :root {
-  --ski-blue: #1B3FAB;
-  --ski-blue-light: #2E55C8;
-  --ski-blue-dark: #122D7A;
-  --ski-blue-50: rgba(27,63,171,0.15);
-  --ski-blue-100: rgba(27,63,171,0.25);
+  /* ── Brand Colors ── */
+  --dku-blue: #00539E;
+  --dku-blue-primary: #003C75;
+  --dku-blue-dark: #002A53;
+  --dku-blue-light: #C2E0F6;
+  --accent-blue: #009DDC;
+  --muted-gold: #C3AD8A;
 
-  --bg-primary: #0A0A0F;
-  --bg-secondary: #16161E;
-  --bg-tertiary: #1E1E28;
-  --bg-card: rgba(255,255,255,0.04);
-  --bg-card-hover: rgba(255,255,255,0.07);
+  /* ── Surface / Background ── */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F2F3FA;
+  --bg-tertiary: #E8EAF5;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F5F6FF;
+  --surface: #F9F9FF;
+  --surface-low: #F2F3FA;
 
-  --border-primary: rgba(255,255,255,0.08);
-  --border-secondary: rgba(255,255,255,0.12);
+  /* ── Border ── */
+  --border-primary: #E2E4EE;
+  --border-secondary: #C8CBDC;
 
-  --text-primary: #FFFFFF;
-  --text-secondary: rgba(255,255,255,0.6);
-  --text-tertiary: rgba(255,255,255,0.3);
-  --text-hint: rgba(255,255,255,0.15);
+  /* ── Text ── */
+  --text-primary: #191C21;
+  --text-secondary: #424751;
+  --text-tertiary: #6B7280;
+  --text-hint: #9CA3AF;
 
-  --accent-blue: #7FA4FF;
-  --accent-purple: #BD87D8;
-  --accent-orange: #E87E34;
-  --accent-green: #2ECC71;
-  --accent-red: #F09595;
+  /* ── Semantic Colors ── */
+  --ski-blue: #003C75;
+  --ski-blue-light: #00539E;
+  --ski-blue-50: rgba(0,60,117,0.08);
+  --ski-blue-100: rgba(0,60,117,0.15);
+
+  --accent-green: #16A34A;
+  --accent-red: #DC2626;
+  --accent-orange: #D97706;
+  --accent-purple: #7C3AED;
+  --accent-yellow: #CA8A04;
+
+  /* ── Shadow ── */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.1), 0 4px 8px rgba(0,0,0,0.05);
+  --shadow-blue: 0 4px 20px rgba(0,60,117,0.2);
 }
 
-* { box-sizing: border-box; }
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; }
 *:focus { outline: none; }
+* { -webkit-tap-highlight-color: transparent; }
 
 html, body {
-  background: var(--bg-primary);
+  background: var(--surface);
   color: var(--text-primary);
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
-    'Pretendard', sans-serif;
+  font-family: 'Noto Sans KR', 'Inter', -apple-system, BlinkMacSystemFont,
+    'Apple SD Gothic Neo', 'Pretendard', sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: var(--bg-primary);
+  -moz-osx-font-smoothing: grayscale;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
-* { -webkit-tap-highlight-color: transparent; }
-
-/* 카드 hover */
+/* ── Card Hover ── */
 .card-hover {
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .card-hover:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  box-shadow: var(--shadow-md);
 }
 .card-hover:active {
   transform: translateY(0px);
+  box-shadow: var(--shadow-sm);
 }
 
-/* 버튼 터치 */
+/* ── Button Press ── */
 .btn-press {
   transition: transform 0.1s ease, opacity 0.1s ease;
 }
 .btn-press:active {
-  transform: scale(0.96);
-  opacity: 0.85;
+  transform: scale(0.97);
+  opacity: 0.88;
 }
 
-/* 순차 등장 */
+/* ── Fade Slide Up ── */
 @keyframes fadeSlideUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .fade-slide-up {
-  animation: fadeSlideUp 0.4s ease forwards;
+  animation: fadeSlideUp 0.35s ease forwards;
   opacity: 0;
 }
 .delay-1 { animation-delay: 0.05s; }
-.delay-2 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.10s; }
 .delay-3 { animation-delay: 0.15s; }
-.delay-4 { animation-delay: 0.2s; }
+.delay-4 { animation-delay: 0.20s; }
 .delay-5 { animation-delay: 0.25s; }
 
-/* 스크롤바 */
-::-webkit-scrollbar { width: 0; }
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-secondary);
+  border-radius: 999px;
+}
+
+/* ── Input Base ── */
+input, textarea, select {
+  font-family: inherit;
+  color: var(--text-primary);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-hint);
+}
+
+/* ── Date Input ── */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: opacity(0.4);
+  cursor: pointer;
+}
+
+/* ── Toggle Switch ── */
+.toggle-track {
+  transition: background 0.2s ease;
+}
+.toggle-thumb {
+  transition: left 0.2s ease;
+}

@@ -8,13 +8,13 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
+    statusBarStyle: 'default',
     title: 'DKU 스키부',
   },
 }
 
 export const viewport: Viewport = {
-  themeColor: '#0A0A0F',
+  themeColor: '#003C75',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -30,8 +30,10 @@ export default function RootLayout({
     <html lang="ko">
       <head>
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body style={{ background: '#0A0A0F' }}>
+      <body style={{ background: '#F9F9FF' }}>
         <ServiceWorkerRegister />
         {children}
       </body>
