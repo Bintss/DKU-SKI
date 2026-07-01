@@ -18,13 +18,10 @@ type SettlementItemRow = {
 
 export async function POST(req: NextRequest) {
   try {
-    const { itemId, action } = await req.json()
-    // action: 'request_confirm' (unpaid → pending, 본인만)
-    //       | 'cancel_pending'  (pending → unpaid, 본인만)
-    //       | 'mark_paid'       (pending → paid, 요청자/운영진만)
-    //       | 'revert_unpaid'   (paid → unpaid, 요청자/운영진만)
+    const body = await req.json()
+    const { itemId, action, rejectReason } = body
 
-    const validActions = ['request_confirm', 'cancel_pending', 'mark_paid', 'revert_unpaid']
+    const validActions = ['request_confirm', 'cancel_pending', 'mark_paid', 'revert_unpaid', 'reject']
     if (!itemId || !validActions.includes(action)) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
     }
@@ -67,13 +64,12 @@ export async function POST(req: NextRequest) {
     const isCreator = item.settlements?.created_by === user.id
     const canConfirm = isCreator || isAdmin
 
-    // 권한 검증
     if (action === 'request_confirm' || action === 'cancel_pending') {
       if (!isOwner) {
         return NextResponse.json({ error: 'Forbidden: not item owner' }, { status: 403 })
       }
     }
-    if (action === 'mark_paid' || action === 'revert_unpaid') {
+    if (action === 'mark_paid' || action === 'revert_unpaid' || action === 'reject') {
       if (!canConfirm) {
         return NextResponse.json({ error: 'Forbidden: requester or admin only' }, { status: 403 })
       }
@@ -84,14 +80,13 @@ export async function POST(req: NextRequest) {
 
     switch (action) {
       case 'request_confirm':
-        // unpaid → pending (반려 후 재송금도 unpaid 상태이므로 동일하게 처리)
         if (item.status !== 'unpaid') {
           return NextResponse.json({ error: 'Invalid state transition' }, { status: 400 })
         }
         newStatus = 'pending'
         updateData = {
           status: 'pending',
-          reject_reason: null,  // 재송금 시 반려 사유 초기화
+          reject_reason: null,
         }
         break
 
@@ -129,6 +124,19 @@ export async function POST(req: NextRequest) {
         }
         break
 
+      case 'reject':
+        if (item.status !== 'pending') {
+          return NextResponse.json({ error: 'Invalid state transition' }, { status: 400 })
+        }
+        newStatus = 'unpaid'
+        updateData = {
+          status: 'unpaid',
+          is_paid: false,
+          paid_at: null,
+          reject_reason: rejectReason ?? 'other',
+        }
+        break
+
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
@@ -147,7 +155,6 @@ export async function POST(req: NextRequest) {
     const settlementId = item.settlement_id
 
     if (action === 'request_confirm' && item.settlements?.created_by) {
-      // 반려 후 재송금인지 최초 송금인지 구분 (reject_reason이 있으면 재송금)
       const wasRejected = !!item.reject_reason
       sendToUsers(
         adminClient,

@@ -116,42 +116,51 @@ export default function SettlementDetailPage() {
   }
 
   const handleReject = async (item: SettlementItem) => {
-    if (!rejectReason) return
+  if (!rejectReason) return
 
-    // 반려 시 바로 unpaid로 되돌림 + 사유만 기록
-    await supabase.from('settlement_items').update({
-      status: 'unpaid',
-      reject_reason: rejectReason,
-      is_paid: false,
-      paid_at: null,
-    }).eq('id', item.id)
+  // API를 통해 반려 처리 (RLS 우회용 service role 사용)
+  const res = await fetch('/api/settlement/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      itemId: item.id,
+      action: 'reject',
+      rejectReason,
+    }),
+  })
 
-    // 송금명 오류인 경우 "송금명오류" 클립보드 복사
-    if (rejectReason === 'wrong_transfer_name') {
-      await navigator.clipboard.writeText('송금명오류').catch(() => {})
-    }
-
-    // 환불 계좌 조회 후 토스 딥링크
-    const { data: memberProfile } = await supabase
-      .from('profiles')
-      .select('name, refund_bank_name, refund_account_number, refund_account_holder')
-      .eq('id', item.user_id)
-      .single()
-
-    if (memberProfile?.refund_account_number) {
-      const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
-      window.location.href = tossUrl
-      setTimeout(() => {
-        window.open('https://toss.me/transfer', '_blank')
-      }, 500)
-    } else {
-      alert(`${memberProfile?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요.\n직접 환불 후 처리해주세요.`)
-    }
-
-    setRejectingId(null)
-    setRejectReason('wrong_transfer_name')
-    fetchData()
+  if (!res.ok) {
+    const result = await res.json()
+    alert(result.error ?? '반려 처리에 실패했어요')
+    return
   }
+
+  // 송금명 오류인 경우 "송금명오류" 클립보드 복사
+  if (rejectReason === 'wrong_transfer_name') {
+    await navigator.clipboard.writeText('송금명오류').catch(() => {})
+  }
+
+  // 환불 계좌 조회 후 토스 딥링크
+  const { data: memberProfile } = await supabase
+    .from('profiles')
+    .select('name, refund_bank_name, refund_account_number, refund_account_holder')
+    .eq('id', item.user_id)
+    .single()
+
+  if (memberProfile?.refund_account_number) {
+    const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
+    window.location.href = tossUrl
+    setTimeout(() => {
+      window.open('https://toss.me/transfer', '_blank')
+    }, 500)
+  } else {
+    alert(`${memberProfile?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요.\n직접 환불 후 처리해주세요.`)
+  }
+
+  setRejectingId(null)
+  setRejectReason('wrong_transfer_name')
+  fetchData()
+}
 
   const handleDelete = async () => {
     if (!confirm('이 정산을 삭제할까요? 되돌릴 수 없어요.')) return
