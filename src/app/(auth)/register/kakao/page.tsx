@@ -52,12 +52,16 @@ export default function KakaoRegisterPage() {
   const [generation, setGeneration] = useState('')
   const [studentIdStatus, setStudentIdStatus] = useState<'completed' | 'not_issued' | 'not_applicable'>('completed')
   const [studentId, setStudentId] = useState('')
-  // 소속 정보
+  // 소속
   const [affiliation, setAffiliation] = useState('')
   // 스키 활동
   const [skiLevel, setSkiLevel] = useState('')
   const [equipment, setEquipment] = useState<string[]>([])
   const [campIntent, setCampIntent] = useState<'yes' | 'no' | 'undecided' | ''>('')
+  // 환급 계좌
+  const [refundBankName, setRefundBankName] = useState('')
+  const [refundAccountNumber, setRefundAccountNumber] = useState('')
+  const [refundAccountHolder, setRefundAccountHolder] = useState('')
   // 동의
   const [agreePrivacy, setAgreePrivacy] = useState(false)
   const [agreeRefund, setAgreeRefund] = useState(false)
@@ -83,9 +87,7 @@ export default function KakaoRegisterPage() {
         .eq('id', user.id)
         .single()
 
-      if (profile?.name && profile.name !== '이름없음') {
-        setName(profile.name)
-      }
+      if (profile?.name && profile.name !== '이름없음') setName(profile.name)
       setInitializing(false)
     }
     fetchInitialName()
@@ -149,6 +151,9 @@ export default function KakaoRegisterPage() {
         ski_level: skiLevel,
         equipment: equipment.length > 0 ? equipment : null,
         camp_intent: campIntent,
+        refund_bank_name: refundBankName || null,
+        refund_account_number: refundAccountNumber || null,
+        refund_account_holder: refundAccountHolder || null,
         role: 'pending',
         membership_type: 'associate',
       })
@@ -180,9 +185,7 @@ export default function KakaoRegisterPage() {
       },
     ])
 
-    if (consentError) {
-      console.error('동의 기록 저장 실패:', consentError)
-    }
+    if (consentError) console.error('동의 기록 저장 실패:', consentError)
 
     fetch('/api/admin/notify-new-member', { method: 'POST' })
       .catch(err => console.error('notify error:', err))
@@ -196,19 +199,16 @@ export default function KakaoRegisterPage() {
     color: 'var(--text-primary)',
   }
 
-  if (initializing) {
-    return (
-      <main className="min-h-screen flex items-center justify-center"
-        style={{ background: 'var(--bg-primary)' }}>
-        <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
-      </main>
-    )
-  }
+  if (initializing) return (
+    <main className="min-h-screen flex items-center justify-center"
+      style={{ background: 'var(--bg-primary)' }}>
+      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
+    </main>
+  )
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 py-12"
-      style={{ background: 'var(--bg-primary)' }}
-    >
+      style={{ background: 'var(--bg-primary)' }}>
       <div className="flex flex-col items-center mb-8">
         <img src="/icon-192x192.png" alt="단국대 스키부"
           className="w-16 h-16 rounded-2xl mb-3"
@@ -343,7 +343,6 @@ export default function KakaoRegisterPage() {
                   </button>
                 ))}
               </div>
-
               {studentIdStatus === 'completed' && (
                 <input type="text" placeholder="학번 (예: 32222435)"
                   value={studentId} onChange={e => setStudentId(e.target.value)}
@@ -430,6 +429,28 @@ export default function KakaoRegisterPage() {
               ))}
             </div>
           </div>
+
+          {/* ─── 환급 계좌 ─── */}
+          <p className="text-xs font-black tracking-widest uppercase mt-3"
+            style={{ color: 'var(--text-hint)' }}>환급 계좌 (선택)</p>
+          <p className="text-xs px-1" style={{ color: 'var(--text-tertiary)' }}>
+            정산 반려 시 환불받을 계좌예요. 나중에 프로필에서 등록해도 돼요.
+          </p>
+
+          <input type="text" placeholder="은행명 (예: 토스뱅크)"
+            value={refundBankName} onChange={e => setRefundBankName(e.target.value)}
+            className="w-full rounded-2xl px-4 py-3.5 text-sm"
+            style={inputStyle} />
+
+          <input type="text" placeholder="계좌번호"
+            value={refundAccountNumber} onChange={e => setRefundAccountNumber(e.target.value)}
+            className="w-full rounded-2xl px-4 py-3.5 text-sm"
+            style={inputStyle} />
+
+          <input type="text" placeholder="예금주"
+            value={refundAccountHolder} onChange={e => setRefundAccountHolder(e.target.value)}
+            className="w-full rounded-2xl px-4 py-3.5 text-sm"
+            style={inputStyle} />
 
           {/* ─── 동의 ─── */}
           <div className="flex flex-col gap-2 mt-2 pt-4"

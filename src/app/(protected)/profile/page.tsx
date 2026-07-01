@@ -26,24 +26,20 @@ export default function ProfilePage() {
   const { profile, loading: profileLoading, refetch } = useProfile()
   const [editMode, setEditMode] = useState(false)
 
-  // 기본 정보
   const [name, setName] = useState('')
   const [bio, setBio] = useState('')
   const [generation, setGeneration] = useState('')
   const [joinType, setJoinType] = useState('')
   const [phone, setPhone] = useState('')
-
-  // 비상연락처
   const [emergencyName, setEmergencyName] = useState('')
   const [emergencyPhone, setEmergencyPhone] = useState('')
-
-  // 소속
   const [affiliation, setAffiliation] = useState('')
-
-  // 스키 활동
   const [skiLevel, setSkiLevel] = useState('')
   const [equipment, setEquipment] = useState<string[]>([])
   const [campIntent, setCampIntent] = useState('')
+  const [refundBankName, setRefundBankName] = useState('')
+  const [refundAccountNumber, setRefundAccountNumber] = useState('')
+  const [refundAccountHolder, setRefundAccountHolder] = useState('')
 
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -65,6 +61,9 @@ export default function ProfilePage() {
     setSkiLevel(p.ski_level ?? '')
     setEquipment(p.equipment ?? [])
     setCampIntent(p.camp_intent ?? '')
+    setRefundBankName(p.refund_bank_name ?? '')
+    setRefundAccountNumber(p.refund_account_number ?? '')
+    setRefundAccountHolder(p.refund_account_holder ?? '')
   }, [profile])
 
   const formatPhoneInput = (value: string) => {
@@ -114,6 +113,9 @@ export default function ProfilePage() {
       ski_level: skiLevel || null,
       equipment: equipment.length > 0 ? equipment : null,
       camp_intent: campIntent || null,
+      refund_bank_name: refundBankName || null,
+      refund_account_number: refundAccountNumber || null,
+      refund_account_holder: refundAccountHolder || null,
     }).eq('id', profile.id)
 
     await refetch()
@@ -135,6 +137,9 @@ export default function ProfilePage() {
     setSkiLevel(p.ski_level ?? '')
     setEquipment(p.equipment ?? [])
     setCampIntent(p.camp_intent ?? '')
+    setRefundBankName(p.refund_bank_name ?? '')
+    setRefundAccountNumber(p.refund_account_number ?? '')
+    setRefundAccountHolder(p.refund_account_holder ?? '')
     setEditMode(false)
   }
 
@@ -290,9 +295,11 @@ export default function ProfilePage() {
           },
           {
             label: '전화번호',
-            view: <span style={{ color: p.phone ? 'var(--text-primary)' : 'var(--text-hint)' }}>
-              {p.phone || '미등록'}
-            </span>,
+            view: (
+              <span style={{ color: p.phone ? 'var(--text-primary)' : 'var(--text-hint)' }}>
+                {p.phone || '미등록'}
+              </span>
+            ),
             edit: (
               <input type="tel" value={phone} placeholder="010-0000-0000"
                 onChange={e => setPhone(formatPhoneInput(e.target.value))}
@@ -407,12 +414,9 @@ export default function ProfilePage() {
                     onClick={() => toggleEquipment(opt.value)}
                     className="rounded-xl px-3 py-2 text-xs font-bold btn-press"
                     style={{
-                      background: equipment.includes(opt.value)
-                        ? 'rgba(27,63,171,0.2)' : 'var(--bg-secondary)',
-                      border: `0.5px solid ${equipment.includes(opt.value)
-                        ? 'var(--accent-blue)' : 'var(--border-primary)'}`,
-                      color: equipment.includes(opt.value)
-                        ? 'var(--accent-blue)' : 'var(--text-tertiary)',
+                      background: equipment.includes(opt.value) ? 'rgba(27,63,171,0.2)' : 'var(--bg-secondary)',
+                      border: `0.5px solid ${equipment.includes(opt.value) ? 'var(--accent-blue)' : 'var(--border-primary)'}`,
+                      color: equipment.includes(opt.value) ? 'var(--accent-blue)' : 'var(--text-tertiary)',
                     }}>
                     {opt.label}
                   </button>
@@ -433,8 +437,7 @@ export default function ProfilePage() {
                     className="flex-1 rounded-xl py-2 text-xs font-bold btn-press"
                     style={{
                       background: campIntent === opt.value ? 'var(--ski-blue)' : 'var(--bg-secondary)',
-                      border: `0.5px solid ${campIntent === opt.value
-                        ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
+                      border: `0.5px solid ${campIntent === opt.value ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
                       color: campIntent === opt.value ? '#fff' : 'var(--text-tertiary)',
                     }}>
                     {opt.label}
@@ -447,8 +450,9 @@ export default function ProfilePage() {
           <div className="flex flex-col gap-2.5">
             {p.ski_level && (
               <div className="flex items-center gap-3">
-                <span className="text-xs w-16 flex-shrink-0"
-                  style={{ color: 'var(--text-tertiary)' }}>스키 실력</span>
+                <span className="text-xs w-16 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                  스키 실력
+                </span>
                 <span className="text-xs font-black px-2.5 py-1 rounded-full"
                   style={{ background: 'rgba(27,63,171,0.2)', color: 'var(--accent-blue)' }}>
                   🎿 {SKI_LEVELS.find(l => l.value === p.ski_level)?.label ?? p.ski_level}
@@ -457,8 +461,9 @@ export default function ProfilePage() {
             )}
             {p.equipment?.length > 0 && (
               <div className="flex items-start gap-3">
-                <span className="text-xs w-16 flex-shrink-0 mt-0.5"
-                  style={{ color: 'var(--text-tertiary)' }}>보유 장비</span>
+                <span className="text-xs w-16 flex-shrink-0 mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+                  보유 장비
+                </span>
                 <div className="flex flex-wrap gap-1.5">
                   {p.equipment.map((e: string) => (
                     <span key={e} className="text-xs font-bold px-2 py-0.5 rounded-full"
@@ -471,10 +476,10 @@ export default function ProfilePage() {
             )}
             {p.camp_intent && (
               <div className="flex items-center gap-3">
-                <span className="text-xs w-16 flex-shrink-0"
-                  style={{ color: 'var(--text-tertiary)' }}>합숙 의향</span>
-                <span className="text-xs font-bold"
-                  style={{ color: 'var(--text-secondary)' }}>
+                <span className="text-xs w-16 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                  합숙 의향
+                </span>
+                <span className="text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
                   {p.camp_intent === 'yes' ? '참여' : p.camp_intent === 'no' ? '미참여' : '미정'}
                 </span>
               </div>
@@ -483,6 +488,51 @@ export default function ProfilePage() {
               <p className="text-sm" style={{ color: 'var(--text-hint)' }}>미등록</p>
             )}
           </div>
+        )}
+      </div>
+
+      {/* ─── 환급 계좌 ─── */}
+      <div className="rounded-2xl p-5 mb-4"
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+        <h2 className="text-xs font-black tracking-widest uppercase mb-1"
+          style={{ color: 'var(--text-hint)' }}>환급 계좌</h2>
+        <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+          정산 반려 시 환불받을 계좌예요
+        </p>
+
+        {editMode ? (
+          <div className="flex flex-col gap-2">
+            <input type="text" placeholder="은행명 (예: 토스뱅크)"
+              value={refundBankName} onChange={e => setRefundBankName(e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
+            <input type="text" placeholder="계좌번호"
+              value={refundAccountNumber} onChange={e => setRefundAccountNumber(e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
+            <input type="text" placeholder="예금주"
+              value={refundAccountHolder} onChange={e => setRefundAccountHolder(e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm" style={inputStyle} />
+          </div>
+        ) : (
+          p.refund_bank_name && p.refund_account_number ? (
+            <div className="flex flex-col gap-1.5">
+              {[
+                { label: '은행', value: p.refund_bank_name },
+                { label: '계좌번호', value: p.refund_account_number },
+                { label: '예금주', value: p.refund_account_holder },
+              ].map(item => (
+                <div key={item.label} className="flex items-center justify-between">
+                  <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{item.label}</span>
+                  <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                    {item.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
+              미등록 — 수정 버튼을 눌러 등록해주세요
+            </p>
+          )
         )}
       </div>
 

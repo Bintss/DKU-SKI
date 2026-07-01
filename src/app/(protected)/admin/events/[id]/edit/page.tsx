@@ -21,7 +21,8 @@ export default function EditEventPage() {
   const [detail, setDetail] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [maxParticipants, setMaxParticipants] = useState('')
-  const [guestFee, setGuestFee] = useState('30000')
+  const [guestFee, setGuestFee] = useState('')
+  const [participationFee, setParticipationFee] = useState('')
   const [deadline, setDeadline] = useState('')
   const [isOpen, setIsOpen] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -58,6 +59,7 @@ export default function EditEventPage() {
         setImageUrl(data.image_url ?? '')
         setMaxParticipants(data.max_participants ? String(data.max_participants) : '')
         setGuestFee(String(data.guest_fee))
+        setParticipationFee(String(data.participation_fee ?? ''))
         setDeadline(data.deadline ? new Date(data.deadline).toISOString().slice(0, 16) : '')
         setIsOpen(data.is_open)
       }
@@ -81,6 +83,7 @@ export default function EditEventPage() {
       image_url: imageUrl || null,
       max_participants: maxParticipants ? parseInt(maxParticipants) : null,
       guest_fee: parseInt(guestFee),
+      participation_fee: participationFee ? parseInt(participationFee) : null,
       deadline: deadline ? new Date(deadline).toISOString() : null,
       is_open: isOpen,
     }).eq('id', id as string)
@@ -206,6 +209,24 @@ export default function EditEventPage() {
             <input type="number" value={guestFee} onChange={e => setGuestFee(e.target.value)}
               className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
           </div>
+          <div>
+  <label className="text-xs font-semibold block mb-1.5"
+    style={{ color: 'var(--text-tertiary)' }}>
+    참가비 (원)
+  </label>
+  <input type="number" value={participationFee}
+    onChange={e => setParticipationFee(e.target.value)}
+    placeholder="0"
+    className="w-full rounded-xl px-4 py-3 text-sm"
+    style={{
+      background: 'var(--bg-secondary)',
+      border: '0.5px solid var(--border-primary)',
+      color: 'var(--text-primary)',
+    }} />
+  <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
+    행사 참가자 전원에게 정산 요청할 금액이에요
+  </p>
+</div>
         </div>
 
         <div className="flex items-center justify-between rounded-xl px-4 py-3"

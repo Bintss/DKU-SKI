@@ -7,14 +7,23 @@ import { sendToUsers } from '@/lib/push-server'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { title, description, totalAmount, dueDate, splitEqual, targets } = body
-    // targets: { userId: string, amount: number }[]
+    const {
+      title,
+      description,
+      totalAmount,
+      dueDate,
+      splitEqual,
+      targets,
+      eventId,        // 행사 연동 시 (optional)
+      transferLabel,  // 송금명 구분 코드 (optional, 예: '합숙비', '티셔츠')
+    } = body
+    // targets: { userId: string, amount: number, name: string }[]
+    // name은 송금명 자동완성용 (선택)
 
     if (!title || !totalAmount || !Array.isArray(targets) || targets.length === 0) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
     }
 
-    // 1. 인증 확인
     const cookieStore = await cookies()
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,21 +42,18 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // 2. 정산 요청은 운영진만 가능
     const { data: requester } = await supabase
-      .from('profiles').select('role').eq('id', user.id).single()
+      .from('profiles').select('role, name').eq('id', user.id).single()
 
     if (requester?.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden: admin only' }, { status: 403 })
     }
 
-    // 3. 금액 합계 검증 (개별 금액 모드일 때 위변조 방지)
     const sumOfTargets = targets.reduce((s: number, t: { amount: number }) => s + t.amount, 0)
     if (sumOfTargets !== totalAmount) {
       return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 })
     }
 
-    // 4. 트랜잭션처럼 처리 — settlements insert 후 items insert 실패 시 rollback
     const adminClient = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -62,6 +68,8 @@ export async function POST(req: NextRequest) {
         amount_per_person: splitEqual ? Math.ceil(totalAmount / targets.length) : 0,
         due_date: dueDate || null,
         created_by: user.id,
+        event_id: eventId || null,
+        transfer_label: transferLabel || null,
       })
       .select()
       .single()
@@ -70,33 +78,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: settlementError?.message ?? 'Create failed' }, { status: 500 })
     }
 
-    const items = targets.map((t: { userId: string; amount: number }) => ({
-      settlement_id: settlement.id,
-      user_id: t.userId,
-      amount: t.amount,
-      is_paid: false,
-      status: 'unpaid',
-    }))
+    // 송금명 자동완성: {이름}{transferLabel} (토스 기준 한글 7자 이내)
+    const items = targets.map((t: { userId: string; amount: number; name?: string }) => {
+      let transferName: string | null = null
+      if (transferLabel && t.name) {
+        const combined = `${t.name}${transferLabel}`
+        // 한글 7자 이내로 truncate
+        transferName = combined.length > 7 ? combined.slice(0, 7) : combined
+      }
+      return {
+        settlement_id: settlement.id,
+        user_id: t.userId,
+        amount: t.amount,
+        is_paid: false,
+        status: 'unpaid',
+        transfer_name: transferName,
+      }
+    })
 
     const { error: itemsError } = await adminClient
       .from('settlement_items')
       .insert(items)
 
     if (itemsError) {
-      // rollback: 생성된 settlement 삭제
       await adminClient.from('settlements').delete().eq('id', settlement.id)
       return NextResponse.json({ error: itemsError.message }, { status: 500 })
     }
-
-    // 5. 알림 발송 — items가 확실히 생성된 후 실행 (race condition 없음)
-    const { data: creator } = await adminClient
-      .from('profiles').select('name').eq('id', user.id).single()
 
     sendToUsers(
       adminClient,
       targets.map((t: { userId: string }) => t.userId),
       '새 정산 요청',
-      `${creator?.name ?? '운영진'}님이 "${title}" 정산을 요청했어요`,
+      `${requester?.name ?? '운영진'}님이 "${title}" 정산을 요청했어요`,
       `/settlement/${settlement.id}`
     ).catch(err => console.error('push send error:', err))
 
