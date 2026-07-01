@@ -7,14 +7,14 @@ import { useProfile } from '@/contexts/ProfileContext'
 import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 
 const NAV_ITEMS = [
-  { href: '/home',       label: '홈',       icon: '🏠' },
-  { href: '/notices',    label: '공지사항',  icon: '📢' },
-  { href: '/camp',       label: '합숙',      icon: '🏔️' },
-  { href: '/events',     label: '행사',      icon: '📅' },
-  { href: '/settlement', label: '정산',      icon: '💳' },
-  { href: '/members',    label: '동문 찾기', icon: '👥' },
-  { href: '/community',  label: '커뮤니티',  icon: '💬' },
-  { href: '/finance',    label: '재무 공시', icon: '📊' },
+  { href: '/home',       label: '홈' },
+  { href: '/notices',    label: '공지사항' },
+  { href: '/camp',       label: '합숙' },
+  { href: '/events',     label: '행사' },
+  { href: '/settlement', label: '정산' },
+  { href: '/members',    label: '동문 찾기' },
+  { href: '/community',  label: '커뮤니티' },
+  { href: '/finance',    label: '재무 공시' },
 ]
 
 type DrawerProps = {
@@ -97,10 +97,10 @@ export default function Drawer({ open, onClose }: DrawerProps) {
       <div
         className="fixed top-0 left-0 h-full z-50 flex flex-col"
         style={{
-          width: 272,
+          width: 260,
           background: '#FFFFFF',
           borderRight: '1px solid var(--border-primary)',
-          boxShadow: open ? '4px 0 24px rgba(0,0,0,0.1)' : 'none',
+          boxShadow: open ? '4px 0 24px rgba(0,0,0,0.08)' : 'none',
           transform: open ? 'translateX(0)' : 'translateX(-100%)',
           transition: 'transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
         }}
@@ -129,7 +129,11 @@ export default function Drawer({ open, onClose }: DrawerProps) {
             <button
               onClick={onClose}
               className="w-8 h-8 flex items-center justify-center rounded-full btn-press"
-              style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 14 }}>
+              style={{
+                background: 'rgba(255,255,255,0.15)',
+                color: '#fff',
+                fontSize: 14,
+              }}>
               ✕
             </button>
           </div>
@@ -151,20 +155,13 @@ export default function Drawer({ open, onClose }: DrawerProps) {
                   color: isActive ? 'var(--dku-blue-primary)' : 'var(--text-secondary)',
                 }}
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-base w-5 text-center">{item.icon}</span>
-                  <span className="text-sm font-bold">{item.label}</span>
-                </div>
+                <span className="text-sm font-bold">{item.label}</span>
                 {badge > 0 && (
                   <span
                     className="min-w-5 h-5 px-1 rounded-full flex items-center justify-center text-[10px] font-black text-white"
                     style={{ background: 'var(--accent-red)' }}>
                     {badge > 9 ? '9+' : badge}
                   </span>
-                )}
-                {isActive && (
-                  <div className="w-1.5 h-1.5 rounded-full ml-auto"
-                    style={{ background: 'var(--dku-blue-primary)' }} />
                 )}
               </a>
             )
@@ -173,26 +170,26 @@ export default function Drawer({ open, onClose }: DrawerProps) {
           {/* 운영진 섹션 */}
           {profile?.role === 'admin' && (
             <>
-              <div className="mx-4 my-3 h-px" style={{ background: 'var(--border-primary)' }} />
+              <div className="mx-4 my-3 h-px"
+                style={{ background: 'var(--border-primary)' }} />
               <p className="px-4 mb-1.5 text-xs font-black tracking-widest uppercase"
                 style={{ color: 'var(--text-hint)' }}>운영진</p>
               {[
-                { href: '/admin/members',     label: '회원 관리',     icon: '👤' },
-                { href: '/camp/new',           label: '합숙 등록',     icon: '➕' },
-                { href: '/admin/events/new',   label: '행사 등록',     icon: '➕' },
-                { href: '/admin/finance',      label: '재무 관리',     icon: '💰' },
-                { href: '/admin/settings',     label: '스키부 운영 설정', icon: '⚙️' },
+                { href: '/admin/members',   label: '회원 관리' },
+                { href: '/camp/new',         label: '합숙 등록' },
+                { href: '/admin/events/new', label: '행사 등록' },
+                { href: '/admin/finance',    label: '재무 관리' },
+                { href: '/admin/settings',   label: '스키부 운영 설정' },
               ].map(item => (
                 <a key={item.href} href={item.href}
                   onClick={onClose}
-                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl mb-0.5 text-sm font-bold transition-colors"
+                  className="flex items-center px-4 py-2.5 rounded-xl mb-0.5 text-sm font-bold transition-colors"
                   style={{
                     background: pathname === item.href
                       ? 'rgba(217,119,6,0.08)' : 'transparent',
                     color: pathname === item.href
                       ? 'var(--accent-orange)' : 'var(--text-tertiary)',
                   }}>
-                  <span className="text-base w-5 text-center">{item.icon}</span>
                   {item.label}
                 </a>
               ))}
@@ -200,22 +197,21 @@ export default function Drawer({ open, onClose }: DrawerProps) {
           )}
         </nav>
 
-        {/* 하단 — 프로필 / 로그아웃 */}
+        {/* 하단 */}
         <div className="px-3 pb-8 pt-3"
           style={{ borderTop: '1px solid var(--border-primary)' }}>
           <a href="/profile" onClick={onClose}
-            className="flex items-center gap-3 px-4 py-2.5 rounded-xl mb-0.5 transition-colors"
+            className="flex items-center px-4 py-2.5 rounded-xl mb-0.5 transition-colors"
             style={{
               background: pathname === '/profile' ? 'var(--ski-blue-50)' : 'transparent',
-              color: pathname === '/profile' ? 'var(--dku-blue-primary)' : 'var(--text-secondary)',
+              color: pathname === '/profile'
+                ? 'var(--dku-blue-primary)' : 'var(--text-secondary)',
             }}>
-            <span className="text-base w-5 text-center">👤</span>
             <span className="text-sm font-bold">내 프로필</span>
           </a>
           <button onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors btn-press"
+            className="w-full flex items-center px-4 py-2.5 rounded-xl text-sm font-bold btn-press"
             style={{ color: 'var(--accent-red)' }}>
-            <span className="text-base w-5 text-center">🚪</span>
             로그아웃
           </button>
         </div>
