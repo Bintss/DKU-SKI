@@ -118,34 +118,39 @@ export default function SettlementDetailPage() {
   }
 
   const handleReject = async (item: SettlementItem) => {
-    if (!rejectReason) return
+  if (!rejectReason) return
 
-    await supabase.from('settlement_items').update({
-      status: 'rejected',
-      reject_reason: rejectReason,
-    }).eq('id', item.id)
+  await supabase.from('settlement_items').update({
+    status: 'rejected',
+    reject_reason: rejectReason,
+  }).eq('id', item.id)
 
-    const { data: memberProfile } = await supabase
-      .from('profiles')
-      .select('name, refund_bank_name, refund_account_number, refund_account_holder')
-      .eq('id', item.user_id)
-      .single()
-
-    if (memberProfile?.refund_account_number) {
-      await navigator.clipboard.writeText(memberProfile.refund_account_number)
-      const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
-      window.location.href = tossUrl
-      setTimeout(() => {
-        window.open('https://toss.me/transfer', '_blank')
-      }, 500)
-    } else {
-      alert(`${memberProfile?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요.\n직접 환불 후 처리해주세요.`)
-    }
-
-    setRejectingId(null)
-    setRejectReason('wrong_transfer_name')
-    fetchData()
+  // 송금명 오류인 경우 — 환불 송금명("송금명오류")을 클립보드에 복사
+  if (rejectReason === 'wrong_transfer_name') {
+    await navigator.clipboard.writeText('송금명오류')
   }
+
+  // 환불 계좌 조회 후 토스 딥링크
+  const { data: memberProfile } = await supabase
+    .from('profiles')
+    .select('name, refund_bank_name, refund_account_number, refund_account_holder')
+    .eq('id', item.user_id)
+    .single()
+
+  if (memberProfile?.refund_account_number) {
+    const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
+    window.location.href = tossUrl
+    setTimeout(() => {
+      window.open('https://toss.me/transfer', '_blank')
+    }, 500)
+  } else {
+    alert(`${memberProfile?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요.\n직접 환불 후 처리해주세요.`)
+  }
+
+  setRejectingId(null)
+  setRejectReason('wrong_transfer_name')
+  fetchData()
+}
 
   const handleDelete = async () => {
     if (!confirm('이 정산을 삭제할까요? 되돌릴 수 없어요.')) return
@@ -461,10 +466,12 @@ export default function SettlementDetailPage() {
                       <RefundAccountPreview userId={item.user_id} supabase={supabase} />
 
                       <button onClick={() => handleReject(item)}
-                        className="w-full rounded-xl py-2.5 text-xs font-black btn-press"
-                        style={{ background: 'rgba(255,107,107,0.2)', color: '#FF6B6B' }}>
-                        반려 처리 + 환불 송금
-                      </button>
+  className="w-full rounded-xl py-2.5 text-xs font-black btn-press"
+  style={{ background: 'rgba(255,107,107,0.2)', color: '#FF6B6B' }}>
+  {rejectReason === 'wrong_transfer_name'
+    ? '반려 처리 + "송금명오류" 복사 + 환불 송금'
+    : '반려 처리 + 환불 송금'}
+</button>
                     </div>
                   )}
                 </div>
@@ -503,32 +510,34 @@ function RefundAccountPreview({
   if (!account) return null
 
   return account.refund_account_number ? (
-    <div className="rounded-xl p-3"
-      style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid var(--border-primary)' }}>
-      <p className="text-xs font-black mb-1.5" style={{ color: 'var(--text-hint)' }}>
-        환불 계좌
-      </p>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-            {account.refund_bank_name} {account.refund_account_number}
-          </p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-            {account.refund_account_holder}
-          </p>
-        </div>
-        <button
-          onClick={async () => {
-            await navigator.clipboard.writeText(account.refund_account_number!)
-            alert('계좌번호가 복사됐어요')
-          }}
-          className="text-xs font-black px-2.5 py-1.5 rounded-lg btn-press flex-shrink-0"
-          style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)' }}>
-          복사
-        </button>
+  <div className="rounded-xl p-3"
+    style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid var(--border-primary)' }}>
+    <p className="text-xs font-black mb-1.5" style={{ color: 'var(--text-hint)' }}>
+      환불 계좌
+    </p>
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+          {account.refund_bank_name} {account.refund_account_number}
+        </p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+          {account.refund_account_holder}
+        </p>
       </div>
     </div>
-  ) : (
+    {/* 송금명 오류 반려 시 안내 */}
+    <div className="mt-2 pt-2 flex items-center gap-2"
+      style={{ borderTop: '0.5px solid var(--border-primary)' }}>
+      <p className="text-xs flex-1" style={{ color: 'var(--text-hint)' }}>
+        환불 송금명으로
+        <span className="font-black mx-1" style={{ color: 'var(--text-primary)' }}>
+          "송금명오류"
+        </span>
+        가 클립보드에 복사돼요
+      </p>
+    </div>
+  </div>
+) : (
     <div className="rounded-xl p-3"
       style={{ background: 'rgba(255,107,107,0.08)', border: '0.5px solid rgba(255,107,107,0.2)' }}>
       <p className="text-xs font-bold" style={{ color: '#FF6B6B' }}>
