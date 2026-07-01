@@ -55,7 +55,6 @@ const STATUS_COLOR: Record<string, string> = {
 
 const REJECT_REASONS = [
   { value: 'wrong_transfer_name', label: '송금명 오류' },
-  { value: 'amount_mismatch', label: '금액 불일치' },
   { value: 'other', label: '기타' },
 ]
 
