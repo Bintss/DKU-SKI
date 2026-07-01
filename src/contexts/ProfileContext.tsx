@@ -10,13 +10,27 @@ type Profile = {
   generation: number
   role: string
   join_type: string
+  join_year: number | null
   student_id: string | null
+  student_id_status: string | null
   bio: string | null
   avatar_url: string | null
+  phone: string | null
+  // 비상연락처
+  emergency_contact_name: string | null
+  emergency_contact_phone: string | null
+  // 소속
+  affiliation: string | null
+  // 스키 활동
+  ski_level: string | null
+  equipment: string[] | null
+  camp_intent: string | null
+  // 회원 유형
+  membership_type: string | null
+  // 계좌 (기존 — 지금은 안 쓰지만 타입은 유지)
   bank_name: string | null
   account_number: string | null
   account_holder: string | null
-  phone: string | null
 }
 
 type ProfileContextType = {
