@@ -59,6 +59,70 @@ const REJECT_REASONS = [
   { value: 'other', label: '기타' },
 ]
 
+function RefundAccountPreview({
+  userId,
+  supabase,
+}: {
+  userId: string
+  supabase: ReturnType<typeof createClient>
+}) {
+  const [account, setAccount] = useState<{
+    name: string | null
+    refund_bank_name: string | null
+    refund_account_number: string | null
+    refund_account_holder: string | null
+  } | null>(null)
+
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('name, refund_bank_name, refund_account_number, refund_account_holder')
+      .eq('id', userId)
+      .single()
+      .then(({ data }) => setAccount(data))
+  }, [userId, supabase])
+
+  if (!account) return null
+
+  return account.refund_account_number ? (
+    <div className="rounded-xl p-3"
+      style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid var(--border-primary)' }}>
+      <p className="text-xs font-black mb-1.5" style={{ color: 'var(--text-hint)' }}>
+        환불 계좌
+      </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+            {account.refund_bank_name} {account.refund_account_number}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+            {account.refund_account_holder}
+          </p>
+        </div>
+        <button
+          onClick={async () => {
+            await navigator.clipboard.writeText(account.refund_account_number!)
+            alert('계좌번호가 복사됐어요')
+          }}
+          className="text-xs font-black px-2.5 py-1.5 rounded-lg btn-press flex-shrink-0"
+          style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)' }}>
+          복사
+        </button>
+      </div>
+    </div>
+  ) : (
+    <div className="rounded-xl p-3"
+      style={{ background: 'rgba(255,107,107,0.08)', border: '0.5px solid rgba(255,107,107,0.2)' }}>
+      <p className="text-xs font-bold" style={{ color: '#FF6B6B' }}>
+        ⚠️ {account.name}님의 환급 계좌가 등록되어 있지 않아요
+      </p>
+      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+        반려 처리 후 직접 환불해주세요
+      </p>
+    </div>
+  )
+}
+
 export default function SettlementDetailPage() {
   const { id } = useParams()
   const router = useRouter()
@@ -118,36 +182,40 @@ export default function SettlementDetailPage() {
   }
 
   const handleReject = async (item: SettlementItem) => {
-    if (!rejectReason) return
+  if (!rejectReason) return
 
-    await supabase.from('settlement_items').update({
-      status: 'rejected',
-      reject_reason: rejectReason,
-    }).eq('id', item.id)
+  // 1. 상태 업데이트
+  await supabase.from('settlement_items').update({
+    status: 'rejected',
+    reject_reason: rejectReason,
+  }).eq('id', item.id)
 
-    // 환불 송금: 토스 딥링크로 운영진 기기에서 처리
-    const p = item.profiles
-    if (item.reject_reason === 'wrong_transfer_name' || rejectReason === 'wrong_transfer_name') {
-      // 환불 계좌 조회
-      const { data: memberProfile } = await supabase
-        .from('profiles')
-        .select('refund_bank_name, refund_account_number, refund_account_holder')
-        .eq('id', item.user_id)
-        .single()
+  // 2. 환불 계좌 조회
+  const { data: memberProfile } = await supabase
+    .from('profiles')
+    .select('name, refund_bank_name, refund_account_number, refund_account_holder')
+    .eq('id', item.user_id)
+    .single()
 
-      if (memberProfile?.refund_account_number) {
-        // 토스 계좌이체 딥링크
-        const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
-        window.location.href = tossUrl
-      } else {
-        alert(`${p?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요. 직접 환불해주세요.`)
-      }
-    }
+  if (memberProfile?.refund_account_number) {
+    // 환불 계좌번호 클립보드 복사
+    await navigator.clipboard.writeText(memberProfile.refund_account_number)
+    
+    // 토스 딥링크로 환불 송금
+    const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
+    window.location.href = tossUrl
 
-    setRejectingId(null)
-    setRejectReason('wrong_transfer_name')
-    fetchData()
+    setTimeout(() => {
+      window.open(`https://toss.me/transfer`, '_blank')
+    }, 500)
+  } else {
+    alert(`${memberProfile?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요.\n직접 환불 후 처리해주세요.`)
   }
+
+  setRejectingId(null)
+  setRejectReason('wrong_transfer_name')
+  fetchData()
+}
 
   const handleDelete = async () => {
     if (!confirm('이 정산을 삭제할까요? 되돌릴 수 없어요.')) return
@@ -440,35 +508,38 @@ export default function SettlementDetailPage() {
 
                   {/* 반려 처리 패널 */}
                   {isRejecting && (
-                    <div className="mt-3 pt-3 flex flex-col gap-2"
-                      style={{ borderTop: '0.5px solid var(--border-primary)' }}>
-                      <p className="text-xs font-black" style={{ color: 'var(--text-hint)' }}>
-                        반려 사유
-                      </p>
-                      <div className="flex gap-2 flex-wrap">
-                        {REJECT_REASONS.map(r => (
-                          <button key={r.value} type="button"
-                            onClick={() => setRejectReason(r.value)}
-                            className="rounded-lg px-2.5 py-1.5 text-xs font-bold btn-press"
-                            style={{
-                              background: rejectReason === r.value
-                                ? 'rgba(255,107,107,0.3)' : 'var(--bg-secondary)',
-                              border: `0.5px solid ${rejectReason === r.value
-                                ? 'rgba(255,107,107,0.5)' : 'var(--border-primary)'}`,
-                              color: rejectReason === r.value ? '#FF6B6B' : 'var(--text-tertiary)',
-                            }}>
-                            {r.label}
-                          </button>
-                        ))}
-                      </div>
-                      <button onClick={() => handleReject(item)}
-                        className="w-full rounded-xl py-2.5 text-xs font-black btn-press"
-                        style={{ background: 'rgba(255,107,107,0.2)', color: '#FF6B6B' }}>
-                        반려 처리
-                        {rejectReason === 'wrong_transfer_name' && ' + 환불 송금'}
-                      </button>
-                    </div>
-                  )}
+  <div className="mt-3 pt-3 flex flex-col gap-2"
+    style={{ borderTop: '0.5px solid var(--border-primary)' }}>
+    <p className="text-xs font-black" style={{ color: 'var(--text-hint)' }}>
+      반려 사유
+    </p>
+    <div className="flex gap-2 flex-wrap">
+      {REJECT_REASONS.map(r => (
+        <button key={r.value} type="button"
+          onClick={() => setRejectReason(r.value)}
+          className="rounded-lg px-2.5 py-1.5 text-xs font-bold btn-press"
+          style={{
+            background: rejectReason === r.value
+              ? 'rgba(255,107,107,0.3)' : 'var(--bg-secondary)',
+            border: `0.5px solid ${rejectReason === r.value
+              ? 'rgba(255,107,107,0.5)' : 'var(--border-primary)'}`,
+            color: rejectReason === r.value ? '#FF6B6B' : 'var(--text-tertiary)',
+          }}>
+          {r.label}
+        </button>
+      ))}
+    </div>
+
+    {/* 환불 계좌 미리보기 */}
+    <RefundAccountPreview userId={item.user_id} supabase={supabase} />
+
+    <button onClick={() => handleReject(item)}
+      className="w-full rounded-xl py-2.5 text-xs font-black btn-press"
+      style={{ background: 'rgba(255,107,107,0.2)', color: '#FF6B6B' }}>
+      반려 처리 + 환불 송금
+    </button>
+  </div>
+)}
                 </div>
               )
             })}
@@ -478,3 +549,4 @@ export default function SettlementDetailPage() {
     </main>
   )
 }
+
