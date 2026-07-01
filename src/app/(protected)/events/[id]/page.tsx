@@ -112,26 +112,34 @@ export default function EventDetailPage() {
   usePageVisibilityRefetch(fetchData, { enabled: !!profile && !applyMode, debounceMs: 2000 })
 
   const handleApply = async () => {
-    if (!profile || !event || !joinDate || !leaveDate) return
-    setApplying(true)
+  if (!profile || !event || !joinDate || !leaveDate) return
+  setApplying(true)
 
-    if (myParticipation) {
-      await supabase.from('event_participants')
-        .update({ join_date: joinDate, leave_date: leaveDate })
-        .eq('id', myParticipation.id)
-    } else {
-      await supabase.from('event_participants').insert({
-        event_id: id,
-        user_id: profile.id,
-        join_date: joinDate,
-        leave_date: leaveDate,
-      })
+  if (myParticipation) {
+    await supabase.from('event_participants')
+      .update({ join_date: joinDate, leave_date: leaveDate })
+      .eq('id', myParticipation.id)
+  } else {
+    const { error } = await supabase.from('event_participants').insert({
+      event_id: id,
+      user_id: profile.id,
+      join_date: joinDate,
+      leave_date: leaveDate,
+      participant_type: 'member',
+      status: 'confirmed',
+    })
+    if (error) {
+      console.error('참가 신청 오류:', error)
+      alert(error.message)
+      setApplying(false)
+      return
     }
-
-    setApplyMode(false)
-    setApplying(false)
-    fetchData()
   }
+
+  setApplyMode(false)
+  setApplying(false)
+  fetchData()
+}
 
   const handleCancel = async () => {
     if (!myParticipation) return
