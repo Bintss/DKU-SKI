@@ -25,7 +25,7 @@ type SettlementItem = {
   id: string
   user_id: string
   amount: number
-  status: 'unpaid' | 'pending' | 'paid' | 'rejected'
+  status: 'unpaid' | 'pending' | 'paid'
   is_paid: boolean
   paid_at: string | null
   transfer_name: string | null
@@ -43,18 +43,17 @@ const STATUS_LABEL: Record<string, string> = {
   unpaid: '미납',
   pending: '확인 대기',
   paid: '납부완료',
-  rejected: '반려',
 }
 
 const STATUS_COLOR: Record<string, string> = {
   unpaid: '#F09595',
   pending: '#FFD700',
   paid: '#2ECC71',
-  rejected: '#FF6B6B',
 }
 
 const REJECT_REASONS = [
   { value: 'wrong_transfer_name', label: '송금명 오류' },
+  { value: 'amount_mismatch', label: '금액 불일치' },
   { value: 'other', label: '기타' },
 ]
 
@@ -117,39 +116,42 @@ export default function SettlementDetailPage() {
   }
 
   const handleReject = async (item: SettlementItem) => {
-  if (!rejectReason) return
+    if (!rejectReason) return
 
-  await supabase.from('settlement_items').update({
-    status: 'rejected',
-    reject_reason: rejectReason,
-  }).eq('id', item.id)
+    // 반려 시 바로 unpaid로 되돌림 + 사유만 기록
+    await supabase.from('settlement_items').update({
+      status: 'unpaid',
+      reject_reason: rejectReason,
+      is_paid: false,
+      paid_at: null,
+    }).eq('id', item.id)
 
-  // 송금명 오류인 경우 — 환불 송금명("송금명오류")을 클립보드에 복사
-  if (rejectReason === 'wrong_transfer_name') {
-    await navigator.clipboard.writeText('송금명오류')
+    // 송금명 오류인 경우 "송금명오류" 클립보드 복사
+    if (rejectReason === 'wrong_transfer_name') {
+      await navigator.clipboard.writeText('송금명오류').catch(() => {})
+    }
+
+    // 환불 계좌 조회 후 토스 딥링크
+    const { data: memberProfile } = await supabase
+      .from('profiles')
+      .select('name, refund_bank_name, refund_account_number, refund_account_holder')
+      .eq('id', item.user_id)
+      .single()
+
+    if (memberProfile?.refund_account_number) {
+      const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
+      window.location.href = tossUrl
+      setTimeout(() => {
+        window.open('https://toss.me/transfer', '_blank')
+      }, 500)
+    } else {
+      alert(`${memberProfile?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요.\n직접 환불 후 처리해주세요.`)
+    }
+
+    setRejectingId(null)
+    setRejectReason('wrong_transfer_name')
+    fetchData()
   }
-
-  // 환불 계좌 조회 후 토스 딥링크
-  const { data: memberProfile } = await supabase
-    .from('profiles')
-    .select('name, refund_bank_name, refund_account_number, refund_account_holder')
-    .eq('id', item.user_id)
-    .single()
-
-  if (memberProfile?.refund_account_number) {
-    const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
-    window.location.href = tossUrl
-    setTimeout(() => {
-      window.open('https://toss.me/transfer', '_blank')
-    }, 500)
-  } else {
-    alert(`${memberProfile?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요.\n직접 환불 후 처리해주세요.`)
-  }
-
-  setRejectingId(null)
-  setRejectReason('wrong_transfer_name')
-  fetchData()
-}
 
   const handleDelete = async () => {
     if (!confirm('이 정산을 삭제할까요? 되돌릴 수 없어요.')) return
@@ -182,7 +184,7 @@ export default function SettlementDetailPage() {
   const myItem = items.find(item => item.user_id === profile?.id)
   const paidCount = items.filter(i => i.status === 'paid').length
   const pendingCount = items.filter(i => i.status === 'pending').length
-  const unpaidCount = items.filter(i => i.status === 'unpaid' || i.status === 'rejected').length
+  const unpaidCount = items.filter(i => i.status === 'unpaid').length
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return null
@@ -238,12 +240,13 @@ export default function SettlementDetailPage() {
           )}
         </div>
 
+        {/* 진행 요약 */}
         <div className="grid grid-cols-3 gap-3 mt-4 pt-4"
           style={{ borderTop: '0.5px solid var(--border-primary)' }}>
           {[
             { label: '납부완료', count: paidCount, color: '#2ECC71' },
             { label: '확인대기', count: pendingCount, color: '#FFD700' },
-            { label: '미납/반려', count: unpaidCount, color: '#F09595' },
+            { label: '미납', count: unpaidCount, color: '#F09595' },
           ].map(item => (
             <div key={item.label} className="text-center">
               <p className="text-xl font-black" style={{ color: item.color }}>{item.count}</p>
@@ -258,12 +261,10 @@ export default function SettlementDetailPage() {
         <div className="rounded-2xl p-5 mb-4"
           style={{
             background: myItem.status === 'paid' ? 'rgba(46,204,113,0.06)'
-              : myItem.status === 'rejected' ? 'rgba(255,107,107,0.06)'
               : myItem.status === 'pending' ? 'rgba(255,214,0,0.06)'
               : 'rgba(27,63,171,0.08)',
             border: `0.5px solid ${
               myItem.status === 'paid' ? 'rgba(46,204,113,0.2)'
-              : myItem.status === 'rejected' ? 'rgba(255,107,107,0.2)'
               : myItem.status === 'pending' ? 'rgba(255,214,0,0.2)'
               : 'rgba(27,63,171,0.25)'}`,
           }}>
@@ -276,6 +277,7 @@ export default function SettlementDetailPage() {
                 color: STATUS_COLOR[myItem.status],
               }}>
               {STATUS_LABEL[myItem.status]}
+              {myItem.status === 'unpaid' && myItem.reject_reason && ' (반려됨)'}
             </span>
           </div>
 
@@ -284,20 +286,22 @@ export default function SettlementDetailPage() {
           </p>
 
           {/* 반려 사유 */}
-          {myItem.status === 'rejected' && myItem.reject_reason && (
+          {myItem.status === 'unpaid' && myItem.reject_reason && (
             <div className="rounded-xl p-3 mb-3"
-              style={{ background: 'rgba(255,107,107,0.1)', border: '0.5px solid rgba(255,107,107,0.2)' }}>
+              style={{ background: 'rgba(255,107,107,0.08)', border: '0.5px solid rgba(255,107,107,0.2)' }}>
               <p className="text-xs font-bold" style={{ color: '#FF6B6B' }}>
-                반려 사유: {REJECT_REASONS.find(r => r.value === myItem.reject_reason)?.label ?? myItem.reject_reason}
+                ⚠️ 반려됨 — {REJECT_REASONS.find(r => r.value === myItem.reject_reason)?.label ?? myItem.reject_reason}
               </p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                아래 송금명을 확인하고 다시 송금해주세요
+                {myItem.reject_reason === 'wrong_transfer_name'
+                  ? '아래 송금명을 확인하고 다시 송금해주세요'
+                  : '운영진에게 문의하거나 다시 송금해주세요'}
               </p>
             </div>
           )}
 
           {/* 송금명 복사 */}
-          {myItem.transfer_name && (myItem.status === 'unpaid' || myItem.status === 'rejected') && (
+          {myItem.transfer_name && myItem.status === 'unpaid' && (
             <div className="rounded-xl p-3 mb-3"
               style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid var(--border-primary)' }}>
               <p className="text-xs mb-1.5" style={{ color: 'var(--text-hint)' }}>
@@ -321,7 +325,7 @@ export default function SettlementDetailPage() {
           )}
 
           {/* 송금 액션 */}
-          {(myItem.status === 'unpaid' || myItem.status === 'rejected') && clubAccount?.account_number && (
+          {myItem.status === 'unpaid' && clubAccount?.account_number && (
             <div className="flex flex-col gap-2 mb-2">
               <button
                 onClick={() => {
@@ -340,25 +344,48 @@ export default function SettlementDetailPage() {
             </div>
           )}
 
-          {(myItem.status === 'unpaid' || myItem.status === 'rejected') ? (
+          {myItem.status === 'unpaid' ? (
             <button onClick={() => callStatusApi(myItem.id, 'request_confirm')}
               className="w-full rounded-xl py-3 text-sm font-black btn-press"
               style={{ background: 'var(--ski-blue)', color: '#fff' }}>
               송금했어요
             </button>
           ) : myItem.status === 'pending' ? (
-            <button onClick={() => callStatusApi(myItem.id, 'cancel_pending')}
-              className="w-full rounded-xl py-2.5 text-xs font-bold btn-press"
-              style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-hint)' }}>
-              취소 (잘못 눌렀어요)
-            </button>
-          ) : null}
+            <div className="flex flex-col gap-2">
+              <div className="rounded-xl p-3 text-center"
+                style={{ background: 'rgba(255,214,0,0.08)', border: '0.5px solid rgba(255,214,0,0.2)' }}>
+                <p className="text-xs font-black mb-0.5" style={{ color: '#FFD700' }}>
+                  확인 대기 중
+                </p>
+                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                  운영진이 확인 후 납부 완료 처리해요
+                </p>
+              </div>
+              <button onClick={() => callStatusApi(myItem.id, 'cancel_pending')}
+                className="w-full rounded-xl py-2.5 text-xs font-bold btn-press"
+                style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-hint)' }}>
+                취소 (잘못 눌렀어요)
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-xl p-3 text-center"
+              style={{ background: 'rgba(46,204,113,0.08)', border: '0.5px solid rgba(46,204,113,0.2)' }}>
+              <p className="text-sm font-black mb-0.5" style={{ color: 'var(--accent-green)' }}>
+                납부 완료 ✓
+              </p>
+              {myItem.paid_at && (
+                <p className="text-xs" style={{ color: 'rgba(46,204,113,0.6)' }}>
+                  {formatDate(myItem.paid_at)} 확인 완료
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* 운영진 전체 현황 */}
       {(isAdmin || isCreator) && (
-        <div className="rounded-2xl p-5 mb-4"
+        <div className="rounded-2xl p-5"
           style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
           <h2 className="text-xs font-black tracking-widest uppercase mb-3"
             style={{ color: 'var(--text-hint)' }}>전체 현황</h2>
@@ -373,7 +400,8 @@ export default function SettlementDetailPage() {
                     background: 'var(--bg-secondary)',
                     border: `0.5px solid ${
                       item.status === 'paid' ? 'rgba(46,204,113,0.2)'
-                      : item.status === 'rejected' ? 'rgba(255,107,107,0.2)'
+                      : item.status === 'pending' ? 'rgba(255,214,0,0.2)'
+                      : item.reject_reason ? 'rgba(255,107,107,0.2)'
                       : 'var(--border-primary)'}`,
                   }}>
                   <div className="flex items-center justify-between gap-2">
@@ -388,8 +416,14 @@ export default function SettlementDetailPage() {
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold"
-                          style={{ color: STATUS_COLOR[item.status] }}>
+                          style={{
+                            color: item.status === 'paid' ? '#2ECC71'
+                              : item.status === 'pending' ? '#FFD700'
+                              : item.reject_reason ? '#FF6B6B'
+                              : '#F09595'
+                          }}>
                           {STATUS_LABEL[item.status]}
+                          {item.status === 'unpaid' && item.reject_reason && ' (반려됨)'}
                         </span>
                         {item.transfer_name && (
                           <span className="text-xs font-bold px-1.5 py-0.5 rounded"
@@ -465,12 +499,12 @@ export default function SettlementDetailPage() {
                       <RefundAccountPreview userId={item.user_id} supabase={supabase} />
 
                       <button onClick={() => handleReject(item)}
-  className="w-full rounded-xl py-2.5 text-xs font-black btn-press"
-  style={{ background: 'rgba(255,107,107,0.2)', color: '#FF6B6B' }}>
-  {rejectReason === 'wrong_transfer_name'
-    ? '반려 처리 + "송금명오류" 복사 + 환불 송금'
-    : '반려 처리 + 환불 송금'}
-</button>
+                        className="w-full rounded-xl py-2.5 text-xs font-black btn-press"
+                        style={{ background: 'rgba(255,107,107,0.2)', color: '#FF6B6B' }}>
+                        {rejectReason === 'wrong_transfer_name'
+                          ? '반려 처리 + "송금명오류" 복사 + 환불 송금'
+                          : '반려 처리 + 환불 송금'}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -509,34 +543,42 @@ function RefundAccountPreview({
   if (!account) return null
 
   return account.refund_account_number ? (
-  <div className="rounded-xl p-3"
-    style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid var(--border-primary)' }}>
-    <p className="text-xs font-black mb-1.5" style={{ color: 'var(--text-hint)' }}>
-      환불 계좌
-    </p>
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-          {account.refund_bank_name} {account.refund_account_number}
-        </p>
-        <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-          {account.refund_account_holder}
+    <div className="rounded-xl p-3"
+      style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid var(--border-primary)' }}>
+      <p className="text-xs font-black mb-1.5" style={{ color: 'var(--text-hint)' }}>
+        환불 계좌
+      </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+            {account.refund_bank_name} {account.refund_account_number}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+            {account.refund_account_holder}
+          </p>
+        </div>
+        <button
+          onClick={async () => {
+            await navigator.clipboard.writeText(account.refund_account_number!)
+            alert('계좌번호가 복사됐어요')
+          }}
+          className="text-xs font-black px-2.5 py-1.5 rounded-lg btn-press flex-shrink-0"
+          style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)' }}>
+          복사
+        </button>
+      </div>
+      <div className="mt-2 pt-2"
+        style={{ borderTop: '0.5px solid var(--border-primary)' }}>
+        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+          환불 송금명으로
+          <span className="font-black mx-1" style={{ color: 'var(--text-primary)' }}>
+            "송금명오류"
+          </span>
+          가 클립보드에 복사돼요
         </p>
       </div>
     </div>
-    {/* 송금명 오류 반려 시 안내 */}
-    <div className="mt-2 pt-2 flex items-center gap-2"
-      style={{ borderTop: '0.5px solid var(--border-primary)' }}>
-      <p className="text-xs flex-1" style={{ color: 'var(--text-hint)' }}>
-        환불 송금명으로
-        <span className="font-black mx-1" style={{ color: 'var(--text-primary)' }}>
-          "송금명오류"
-        </span>
-        가 클립보드에 복사돼요
-      </p>
-    </div>
-  </div>
-) : (
+  ) : (
     <div className="rounded-xl p-3"
       style={{ background: 'rgba(255,107,107,0.08)', border: '0.5px solid rgba(255,107,107,0.2)' }}>
       <p className="text-xs font-bold" style={{ color: '#FF6B6B' }}>

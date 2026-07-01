@@ -19,10 +19,10 @@ type SettlementItemRow = {
 export async function POST(req: NextRequest) {
   try {
     const { itemId, action } = await req.json()
-    // action: 'request_confirm' (unpaid/rejected → pending, 본인만)
+    // action: 'request_confirm' (unpaid → pending, 본인만)
     //       | 'cancel_pending'  (pending → unpaid, 본인만)
     //       | 'mark_paid'       (pending → paid, 요청자/운영진만)
-    //       | 'revert_unpaid'   (paid/rejected → unpaid, 요청자/운영진만)
+    //       | 'revert_unpaid'   (paid → unpaid, 요청자/운영진만)
 
     const validActions = ['request_confirm', 'cancel_pending', 'mark_paid', 'revert_unpaid']
     if (!itemId || !validActions.includes(action)) {
@@ -84,8 +84,8 @@ export async function POST(req: NextRequest) {
 
     switch (action) {
       case 'request_confirm':
-        // unpaid 또는 rejected 상태에서 pending으로
-        if (item.status !== 'unpaid' && item.status !== 'rejected') {
+        // unpaid → pending (반려 후 재송금도 unpaid 상태이므로 동일하게 처리)
+        if (item.status !== 'unpaid') {
           return NextResponse.json({ error: 'Invalid state transition' }, { status: 400 })
         }
         newStatus = 'pending'
@@ -108,12 +108,16 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'Invalid state transition' }, { status: 400 })
         }
         newStatus = 'paid'
-        updateData = { status: 'paid', is_paid: true, paid_at: new Date().toISOString() }
+        updateData = {
+          status: 'paid',
+          is_paid: true,
+          paid_at: new Date().toISOString(),
+          reject_reason: null,
+        }
         break
 
       case 'revert_unpaid':
-        // paid 또는 rejected → unpaid (운영진/요청자만)
-        if (item.status !== 'paid' && item.status !== 'rejected') {
+        if (item.status !== 'paid') {
           return NextResponse.json({ error: 'Invalid state transition' }, { status: 400 })
         }
         newStatus = 'unpaid'
@@ -143,8 +147,8 @@ export async function POST(req: NextRequest) {
     const settlementId = item.settlement_id
 
     if (action === 'request_confirm' && item.settlements?.created_by) {
-      // 재송금(rejected → pending)인지 최초 송금인지 구분해서 알림 문구 다르게
-      const wasRejected = item.status === 'rejected'
+      // 반려 후 재송금인지 최초 송금인지 구분 (reject_reason이 있으면 재송금)
+      const wasRejected = !!item.reject_reason
       sendToUsers(
         adminClient,
         [item.settlements.created_by],
