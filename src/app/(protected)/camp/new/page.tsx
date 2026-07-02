@@ -44,7 +44,8 @@ export default function NewCampPage() {
     setSubmitting(true); setError('')
     const { data, error } = await supabase.from('camps').insert({
       title, start_date: startDate, end_date: endDate,
-      location: location || null, description: description || null,
+      location: location || null,
+      description: description || null,
       is_open: isOpen,
       deadline: deadline || null,
       max_participants: maxParticipants ? parseInt(maxParticipants) : null,
@@ -130,8 +131,7 @@ export default function NewCampPage() {
             placeholder="0" style={inputStyle} />
         </div>
 
-        {/* 신청 오픈 토글 */}
-        <div className="flex items-center justify-between rounded-xl px-4 py-3"
+        <div className="flex items-center justify-between rounded-xl px-4 py-3.5"
           style={{ background: '#fff', border: '1px solid var(--border-primary)' }}>
           <div>
             <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>신청 오픈</p>
