@@ -54,25 +54,21 @@ export default function CampDetailPage() {
   const [loading, setLoading] = useState(true)
   const [currentMonth, setCurrentMonth] = useState<{ year: number; month: number } | null>(null)
 
-  // 날짜 상세 패널
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [showPanel, setShowPanel] = useState(false)
 
-  // 신청 모드 (탭 선택 방식)
   const [applyMode, setApplyMode] = useState(false)
   const [selectStep, setSelectStep] = useState<'start' | 'end'>('start')
   const [selectedStart, setSelectedStart] = useState<string | null>(null)
   const [selectedEnd, setSelectedEnd] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // 게스트 추가
   const [guestMode, setGuestMode] = useState(false)
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
   const [guestJoinDate, setGuestJoinDate] = useState('')
   const [guestLeaveDate, setGuestLeaveDate] = useState('')
   const [guestFee, setGuestFee] = useState('')
-
 
   const fetchData = useCallback(async () => {
     if (!profile) return
@@ -107,7 +103,6 @@ export default function CampDetailPage() {
     if (profile) fetchData()
   }, [profile, fetchData])
 
-  // 탭 복귀 시 재조회 — 단, 신청 모드 중에는 막아서 선택 중인 날짜가 날아가지 않게 함
   usePageVisibilityRefetch(fetchData, { enabled: !!profile && !applyMode, debounceMs: 2000 })
 
   const isInRange = (date: string, start: string, end: string) =>
@@ -160,7 +155,6 @@ export default function CampDetailPage() {
       return
     }
 
-    // 신청 모드 — 탭 선택
     if (selectStep === 'start') {
       setSelectedStart(date)
       setSelectedEnd(null)
@@ -260,16 +254,16 @@ export default function CampDetailPage() {
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">
         <Link href="/camp" className="text-xs font-semibold"
-  style={{ color: 'var(--text-tertiary)' }}>← 합숙</Link>
+          style={{ color: 'var(--text-tertiary)' }}>← 합숙</Link>
         {profile?.role === 'admin' && (
           <div className="flex items-center gap-2">
             <a href={`/admin/camps/${id}/edit`}
               className="text-xs font-black text-white px-3 py-1 rounded-lg btn-press"
-              style={{ background: 'var(--ski-blue)' }}>
+              style={{ background: 'var(--dku-blue-primary)' }}>
               수정
             </a>
             <span className="text-xs font-black px-2 py-1 rounded-full"
-              style={{ background: 'rgba(230,126,34,0.2)', color: 'var(--accent-orange)' }}>
+              style={{ background: 'rgba(217,119,6,0.12)', color: 'var(--accent-orange)' }}>
               운영진
             </span>
           </div>
@@ -299,12 +293,12 @@ export default function CampDetailPage() {
       {/* 참여 현황 요약 */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         {[
-          { label: '부원', count: [...new Set(participants.filter(p => p.participant_type === 'member').map(p => p.user_id))].length, color: 'var(--accent-blue)', bg: 'rgba(27,63,171,0.15)' },
-          { label: 'OB', count: [...new Set(participants.filter(p => p.participant_type === 'ob').map(p => p.user_id))].length, color: 'var(--accent-purple)', bg: 'rgba(155,89,182,0.15)' },
-          { label: '게스트', count: guests.length, color: 'var(--accent-orange)', bg: 'rgba(230,126,34,0.15)' },
+          { label: '부원', count: [...new Set(participants.filter(p => p.participant_type === 'member').map(p => p.user_id))].length, color: 'var(--dku-blue)', bg: 'var(--ski-blue-50)' },
+          { label: 'OB', count: [...new Set(participants.filter(p => p.participant_type === 'ob').map(p => p.user_id))].length, color: 'var(--accent-purple)', bg: 'rgba(124,58,237,0.08)' },
+          { label: '게스트', count: guests.length, color: 'var(--accent-orange)', bg: 'rgba(217,119,6,0.08)' },
         ].map(item => (
           <div key={item.label} className="rounded-xl px-4 py-3 text-center"
-            style={{ background: item.bg, border: `0.5px solid ${item.color}30` }}>
+            style={{ background: item.bg, border: `1px solid ${item.color}30` }}>
             <p className="text-2xl font-black" style={{ color: item.color }}>{item.count}</p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{item.label}</p>
           </div>
@@ -329,7 +323,8 @@ export default function CampDetailPage() {
                 className="w-9 h-9 rounded-full flex items-center justify-center text-lg"
                 style={{
                   color: hasPrev ? 'var(--text-secondary)' : 'var(--text-hint)',
-                  background: hasPrev ? 'var(--bg-card)' : 'transparent',
+                  background: hasPrev ? '#fff' : 'transparent',
+                  border: hasPrev ? '1px solid var(--border-primary)' : 'none',
                   cursor: hasPrev ? 'pointer' : 'default',
                 }}>‹</button>
               <p className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>
@@ -339,7 +334,8 @@ export default function CampDetailPage() {
                 className="w-9 h-9 rounded-full flex items-center justify-center text-lg"
                 style={{
                   color: hasNext ? 'var(--text-secondary)' : 'var(--text-hint)',
-                  background: hasNext ? 'var(--bg-card)' : 'transparent',
+                  background: hasNext ? '#fff' : 'transparent',
+                  border: hasNext ? '1px solid var(--border-primary)' : 'none',
                   cursor: hasNext ? 'pointer' : 'default',
                 }}>›</button>
             </div>
@@ -349,8 +345,8 @@ export default function CampDetailPage() {
               {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
                 <div key={d} className="text-center text-xs py-1 font-black"
                   style={{
-                    color: i === 0 ? 'rgba(255,80,80,0.4)' :
-                      i === 6 ? 'rgba(100,150,255,0.4)' : 'var(--text-hint)'
+                    color: i === 0 ? 'var(--accent-red)' :
+                      i === 6 ? 'var(--dku-blue)' : 'var(--text-hint)'
                   }}>{d}</div>
               ))}
             </div>
@@ -368,7 +364,6 @@ export default function CampDetailPage() {
                 const dayNum = parseInt(date.split('-')[2])
                 const dayOfWeek = new Date(date + 'T00:00:00').getDay()
 
-                // 탭 선택 범위
                 const isStart = applyMode && selectedStart === date && isCampDate
                 const isEnd = applyMode && selectedEnd === date && isCampDate
                 const isInApplyRange = applyMode && selectedStart && selectedEnd &&
@@ -382,23 +377,23 @@ export default function CampDetailPage() {
 
                 if (applyMode) {
                   if (isStart && isEnd) {
-                    bg = '#1B3FAB'; borderRadius = '8px'; scale = 1.08
-                    shadow = '0 4px 12px rgba(27,63,171,0.5)'
+                    bg = 'var(--dku-blue-primary)'; borderRadius = '8px'; scale = 1.08
+                    shadow = 'var(--shadow-blue)'
                   } else if (isStart) {
-                    bg = '#1B3FAB'
+                    bg = 'var(--dku-blue-primary)'
                     borderRadius = selectedEnd ? '8px 0 0 8px' : '8px'
-                    scale = 1.05; shadow = '0 4px 12px rgba(27,63,171,0.5)'
+                    scale = 1.05; shadow = 'var(--shadow-blue)'
                   } else if (isEnd) {
-                    bg = '#1B3FAB'; borderRadius = '0 8px 8px 0'
-                    scale = 1.05; shadow = '0 4px 12px rgba(27,63,171,0.5)'
+                    bg = 'var(--dku-blue-primary)'; borderRadius = '0 8px 8px 0'
+                    scale = 1.05; shadow = 'var(--shadow-blue)'
                   } else if (isInApplyRange) {
-                    bg = 'rgba(27,63,171,0.2)'; borderRadius = '0'
+                    bg = 'var(--ski-blue-100)'; borderRadius = '0'
                   }
                 } else if (isSelected) {
-                  bg = '#1B3FAB'; scale = 1.08
-                  shadow = '0 4px 12px rgba(27,63,171,0.5)'
+                  bg = 'var(--dku-blue-primary)'; scale = 1.08
+                  shadow = 'var(--shadow-blue)'
                 } else if (isMyDate && isCampDate) {
-                  bg = 'rgba(27,63,171,0.2)'
+                  bg = 'var(--ski-blue-50)'
                 }
 
                 return (
@@ -411,7 +406,7 @@ export default function CampDetailPage() {
                       transform: `scale(${scale})`,
                       boxShadow: shadow,
                       transition: 'background 0.15s, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                      opacity: isCampDate ? 1 : 0.15,
+                      opacity: isCampDate ? 1 : 0.2,
                       zIndex: scale > 1 ? 1 : 0,
                     }}
                     onClick={() => isCampDate && handleDateTap(date)}
@@ -420,8 +415,8 @@ export default function CampDetailPage() {
                       style={{
                         color: (isSelected || isStart || isEnd)
                           ? '#fff'
-                          : dayOfWeek === 0 ? 'rgba(255,80,80,0.7)'
-                          : dayOfWeek === 6 ? 'rgba(100,150,255,0.7)'
+                          : dayOfWeek === 0 ? 'var(--accent-red)'
+                          : dayOfWeek === 6 ? 'var(--dku-blue)'
                           : 'var(--text-secondary)'
                       }}>
                       {dayNum}
@@ -434,17 +429,17 @@ export default function CampDetailPage() {
                           <div key={p.id} className="w-1 h-1 rounded-full"
                             style={{
                               background: (isSelected || isStart || isEnd || isInApplyRange)
-                                ? 'rgba(255,255,255,0.6)'
+                                ? 'rgba(255,255,255,0.7)'
                                 : p.user_id === profile?.id ? 'var(--accent-green)'
                                 : p.participant_type === 'ob' ? 'var(--accent-purple)'
-                                : 'var(--accent-blue)'
+                                : 'var(--dku-blue)'
                             }} />
                         ))}
                         {dayGuests.slice(0, 2).map(g => (
                           <div key={g.id} className="w-1 h-1 rounded-full"
                             style={{
                               background: (isSelected || isStart || isEnd)
-                                ? 'rgba(255,255,255,0.6)' : 'var(--accent-orange)'
+                                ? 'rgba(255,255,255,0.7)' : 'var(--accent-orange)'
                             }} />
                         ))}
                       </div>
@@ -454,7 +449,7 @@ export default function CampDetailPage() {
                       <span className="text-[9px] mt-0.5 font-black"
                         style={{
                           color: (isSelected || isStart || isEnd)
-                            ? 'rgba(255,255,255,0.7)' : 'var(--text-hint)'
+                            ? 'rgba(255,255,255,0.8)' : 'var(--text-hint)'
                         }}>
                         {total}
                       </span>
@@ -470,7 +465,7 @@ export default function CampDetailPage() {
                 {calendarMonths.map((m, i) => (
                   <button key={i} onClick={() => setCurrentMonth(m)}
                     className="w-1.5 h-1.5 rounded-full transition-colors"
-                    style={{ background: i === currentIdx ? 'var(--ski-blue)' : 'rgba(255,255,255,0.15)' }} />
+                    style={{ background: i === currentIdx ? 'var(--dku-blue-primary)' : 'var(--border-secondary)' }} />
                 ))}
               </div>
             )}
@@ -481,7 +476,7 @@ export default function CampDetailPage() {
       {/* 범례 */}
       <div className="flex gap-4 mt-4 mb-2 flex-wrap">
         {[
-          { color: 'var(--accent-blue)', label: '부원' },
+          { color: 'var(--dku-blue)', label: '부원' },
           { color: 'var(--accent-purple)', label: 'OB' },
           { color: 'var(--accent-orange)', label: '게스트' },
           { color: 'var(--accent-green)', label: '나' },
@@ -493,21 +488,23 @@ export default function CampDetailPage() {
         ))}
       </div>
 
-      {/* 날짜 상세 패널 — 슬라이드업 */}
+      {/* 날짜 상세 패널 */}
       {showPanel && selectedDate && !applyMode && (
         <>
-          <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.6)' }}
+          <div className="fixed inset-0 z-40"
+            style={{ background: 'rgba(0,30,60,0.4)', backdropFilter: 'blur(4px)' }}
             onClick={() => setShowPanel(false)} />
           <div className="fixed bottom-0 left-0 right-0 z-50 max-w-lg mx-auto"
             style={{
-              background: 'var(--bg-secondary)',
+              background: '#ffffff',
               borderRadius: '20px 20px 0 0',
-              borderTop: '0.5px solid var(--border-secondary)',
+              borderTop: '1px solid var(--border-primary)',
+              boxShadow: '0 -4px 24px rgba(0,0,0,0.08)',
               animation: 'slideUp 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
             }}>
             <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
             <div className="w-9 h-1 rounded-full mx-auto mt-3 mb-4"
-              style={{ background: 'rgba(255,255,255,0.15)' }} />
+              style={{ background: 'var(--border-secondary)' }} />
 
             <div className="px-5 pb-8">
               <div className="flex items-center justify-between mb-4">
@@ -540,7 +537,7 @@ export default function CampDetailPage() {
                           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
                             style={{
                               background: p.user_id === profile?.id ? 'var(--accent-green)' :
-                                p.participant_type === 'ob' ? 'rgba(155,89,182,0.5)' : 'var(--ski-blue)'
+                                p.participant_type === 'ob' ? 'var(--accent-purple)' : 'var(--dku-blue-primary)'
                             }}>
                             {p.profiles?.name?.[0] ?? '?'}
                           </div>
@@ -554,13 +551,13 @@ export default function CampDetailPage() {
                           </span>
                           {p.participant_type === 'ob' && (
                             <span className="text-xs font-black ml-1.5 px-1.5 py-0.5 rounded-full"
-                              style={{ background: 'rgba(155,89,182,0.2)', color: 'var(--accent-purple)' }}>
+                              style={{ background: 'rgba(124,58,237,0.1)', color: 'var(--accent-purple)' }}>
                               OB
                             </span>
                           )}
                           {p.label && (
                             <span className="text-xs font-black ml-1.5 px-1.5 py-0.5 rounded-full"
-                              style={{ background: 'rgba(46,204,113,0.15)', color: 'var(--accent-green)' }}>
+                              style={{ background: 'rgba(22,163,74,0.1)', color: 'var(--accent-green)' }}>
                               {p.label}
                             </span>
                           )}
@@ -583,7 +580,7 @@ export default function CampDetailPage() {
                     {selectedGuests.map(g => (
                       <div key={g.id} className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
-                          style={{ background: 'rgba(230,126,34,0.4)' }}>
+                          style={{ background: 'var(--muted-gold)' }}>
                           {g.name[0]}
                         </div>
                         <div className="flex-1">
@@ -599,13 +596,14 @@ export default function CampDetailPage() {
                             <button onClick={() => toggleFeePaid(g.id, g.fee_paid)}
                               className="text-xs font-black px-2.5 py-1 rounded-lg btn-press"
                               style={{
-                                background: g.fee_paid ? 'rgba(46,204,113,0.2)' : 'rgba(255,255,255,0.06)',
+                                background: g.fee_paid ? 'rgba(22,163,74,0.1)' : 'var(--surface-low)',
+                                border: `1px solid ${g.fee_paid ? 'rgba(22,163,74,0.2)' : 'var(--border-primary)'}`,
                                 color: g.fee_paid ? 'var(--accent-green)' : 'var(--text-tertiary)',
                               }}>
                               {g.fee_paid ? '수납완료' : '미수납'}
                             </button>
                             <button onClick={() => handleDeleteGuest(g.id)}
-                              className="text-sm" style={{ color: 'rgba(255,107,107,0.4)' }}>✕</button>
+                              className="text-sm" style={{ color: 'var(--accent-red)' }}>✕</button>
                           </div>
                         )}
                       </div>
@@ -622,14 +620,14 @@ export default function CampDetailPage() {
 
               {/* 게스트 추가 (운영진) */}
               {profile?.role === 'admin' && (
-                <div className="pt-4" style={{ borderTop: '0.5px solid var(--border-primary)' }}>
+                <div className="pt-4" style={{ borderTop: '1px solid var(--border-primary)' }}>
                   {!guestMode ? (
                     <button onClick={() => setGuestMode(true)}
                       className="w-full text-sm font-black py-2.5 rounded-xl btn-press"
                       style={{
-                        background: 'rgba(27,63,171,0.15)',
-                        border: '0.5px solid rgba(27,63,171,0.3)',
-                        color: 'var(--accent-blue)',
+                        background: 'var(--ski-blue-50)',
+                        border: '1px solid var(--dku-blue-light)',
+                        color: 'var(--dku-blue-primary)',
                       }}>
                       + 게스트 추가
                     </button>
@@ -645,9 +643,10 @@ export default function CampDetailPage() {
                           value={field.value} onChange={e => field.onChange(e.target.value)}
                           className="rounded-xl px-3 py-2.5 text-sm"
                           style={{
-                            background: 'var(--bg-tertiary)',
-                            border: '0.5px solid var(--border-primary)',
+                            background: 'var(--surface-low)',
+                            border: '1px solid var(--border-primary)',
                             color: 'var(--text-primary)',
+                            outline: 'none',
                           }} />
                       ))}
                       <div className="grid grid-cols-2 gap-2">
@@ -664,9 +663,10 @@ export default function CampDetailPage() {
                               onChange={e => field.onChange(e.target.value)}
                               className="w-full rounded-xl px-3 py-2 text-sm"
                               style={{
-                                background: 'var(--bg-tertiary)',
-                                border: '0.5px solid var(--border-primary)',
+                                background: 'var(--surface-low)',
+                                border: '1px solid var(--border-primary)',
                                 color: 'var(--text-primary)',
+                                outline: 'none',
                               }} />
                           </div>
                         ))}
@@ -675,19 +675,20 @@ export default function CampDetailPage() {
                         onChange={e => setGuestFee(e.target.value)}
                         className="rounded-xl px-3 py-2.5 text-sm"
                         style={{
-                          background: 'var(--bg-tertiary)',
-                          border: '0.5px solid var(--border-primary)',
+                          background: 'var(--surface-low)',
+                          border: '1px solid var(--border-primary)',
                           color: 'var(--text-primary)',
+                          outline: 'none',
                         }} />
                       <div className="flex gap-2">
                         <button onClick={handleAddGuest} disabled={submitting || !guestName}
                           className="flex-1 text-white rounded-xl py-2.5 text-sm font-black disabled:opacity-50 btn-press"
-                          style={{ background: 'var(--ski-blue)' }}>
+                          style={{ background: 'var(--dku-blue-primary)' }}>
                           {submitting ? '추가 중...' : '추가'}
                         </button>
                         <button onClick={() => { setGuestMode(false); setGuestName(''); setGuestPhone('') }}
                           className="px-4 rounded-xl py-2.5 text-sm font-black btn-press"
-                          style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-tertiary)' }}>
+                          style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-tertiary)' }}>
                           취소
                         </button>
                       </div>
@@ -704,9 +705,11 @@ export default function CampDetailPage() {
       {canApply && (
         <div className="fixed bottom-0 left-0 right-0 z-30 max-w-lg mx-auto"
           style={{
-            background: 'rgba(22,22,30,0.95)',
+            background: 'rgba(255,255,255,0.95)',
             backdropFilter: 'blur(12px)',
-            borderTop: '0.5px solid var(--border-primary)',
+            WebkitBackdropFilter: 'blur(12px)',
+            borderTop: '1px solid var(--border-primary)',
+            boxShadow: '0 -2px 16px rgba(0,0,0,0.06)',
             padding: '12px 20px 28px',
           }}>
           {!applyMode ? (
@@ -720,19 +723,19 @@ export default function CampDetailPage() {
                       const n = getNights(p.join_date, p.leave_date)
                       return (
                         <div key={p.id} className="flex items-center gap-2 rounded-xl px-3 py-2"
-                          style={{ background: 'rgba(27,63,171,0.15)', border: '0.5px solid rgba(27,63,171,0.3)' }}>
+                          style={{ background: 'var(--ski-blue-50)', border: '1px solid var(--dku-blue-light)' }}>
                           <span className="text-xs font-black px-1.5 py-0.5 rounded-full"
-                            style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
+                            style={{ background: 'var(--ski-blue-100)', color: 'var(--dku-blue-primary)' }}>
                             {p.label ?? '1차'}
                           </span>
-                          <span className="text-xs font-bold flex-1" style={{ color: 'var(--accent-blue)' }}>
+                          <span className="text-xs font-bold flex-1" style={{ color: 'var(--dku-blue-primary)' }}>
                             {p.join_date.slice(5)} — {p.leave_date.slice(5)}
                             <span className="font-normal ml-1" style={{ color: 'var(--text-hint)' }}>
                               {n > 0 ? `${n}박` : '당일'}
                             </span>
                           </span>
                           <button onClick={() => handleDeleteParticipation(p.id)}
-                            className="text-xs" style={{ color: 'rgba(255,107,107,0.5)' }}>✕</button>
+                            className="text-xs" style={{ color: 'var(--accent-red)' }}>✕</button>
                         </div>
                       )
                     })}
@@ -747,7 +750,7 @@ export default function CampDetailPage() {
                 setShowPanel(false)
               }}
                 className="w-full text-white rounded-xl py-3 text-sm font-black btn-press"
-                style={{ background: 'var(--ski-blue)' }}>
+                style={{ background: 'var(--dku-blue-primary)' }}>
                 + 일정 추가
               </button>
             </div>
@@ -762,13 +765,13 @@ export default function CampDetailPage() {
                 <div className="flex-1 rounded-xl px-3 py-2.5 text-center"
                   style={{
                     background: selectStep === 'start' && !selectedStart
-                      ? 'rgba(27,63,171,0.25)' : selectedStart
-                      ? 'rgba(27,63,171,0.2)' : 'rgba(255,255,255,0.04)',
-                    border: `0.5px solid ${selectStep === 'start'
-                      ? 'rgba(27,63,171,0.6)' : 'var(--border-primary)'}`,
+                      ? 'var(--ski-blue-100)' : selectedStart
+                      ? 'var(--ski-blue-50)' : 'var(--surface-low)',
+                    border: `1px solid ${selectStep === 'start'
+                      ? 'var(--dku-blue-primary)' : 'var(--border-primary)'}`,
                   }}>
                   <p className="text-xs font-black mb-0.5"
-                    style={{ color: selectStep === 'start' ? 'var(--accent-blue)' : 'var(--text-hint)' }}>
+                    style={{ color: selectStep === 'start' ? 'var(--dku-blue-primary)' : 'var(--text-hint)' }}>
                     {selectStep === 'start' && !selectedStart ? '탭하여 선택' : '도착일'}
                   </p>
                   <p className="text-sm font-black"
@@ -782,13 +785,13 @@ export default function CampDetailPage() {
                 <div className="flex-1 rounded-xl px-3 py-2.5 text-center"
                   style={{
                     background: selectStep === 'end' && !selectedEnd
-                      ? 'rgba(27,63,171,0.25)' : selectedEnd
-                      ? 'rgba(27,63,171,0.2)' : 'rgba(255,255,255,0.04)',
-                    border: `0.5px solid ${selectStep === 'end'
-                      ? 'rgba(27,63,171,0.6)' : 'var(--border-primary)'}`,
+                      ? 'var(--ski-blue-100)' : selectedEnd
+                      ? 'var(--ski-blue-50)' : 'var(--surface-low)',
+                    border: `1px solid ${selectStep === 'end'
+                      ? 'var(--dku-blue-primary)' : 'var(--border-primary)'}`,
                   }}>
                   <p className="text-xs font-black mb-0.5"
-                    style={{ color: selectStep === 'end' ? 'var(--accent-blue)' : 'var(--text-hint)' }}>
+                    style={{ color: selectStep === 'end' ? 'var(--dku-blue-primary)' : 'var(--text-hint)' }}>
                     {selectStep === 'end' && !selectedEnd ? '탭하여 선택' : '출발일'}
                   </p>
                   <p className="text-sm font-black"
@@ -810,7 +813,7 @@ export default function CampDetailPage() {
                 <button onClick={handleConfirmApply}
                   disabled={submitting || !selectedStart || !selectedEnd}
                   className="flex-1 text-white rounded-xl py-3 text-sm font-black disabled:opacity-40 btn-press"
-                  style={{ background: 'var(--ski-blue)' }}>
+                  style={{ background: 'var(--dku-blue-primary)' }}>
                   {submitting ? '...' : '확정'}
                 </button>
                 <button onClick={() => {
@@ -820,7 +823,7 @@ export default function CampDetailPage() {
                   setSelectStep('start')
                 }}
                   className="rounded-xl px-4 py-3 text-sm font-black btn-press"
-                  style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-tertiary)' }}>
+                  style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-tertiary)' }}>
                   취소
                 </button>
               </div>
