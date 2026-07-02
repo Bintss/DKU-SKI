@@ -24,29 +24,22 @@ export default function NoticeDetailPage() {
   const router = useRouter()
   const { profile, loading: profileLoading } = useProfile()
   const supabase = createClient()
-
   const [notice, setNotice] = useState<Notice | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchNotice = useCallback(async () => {
-    const { data: noticeData } = await supabase
-      .from('notices')
-      .select('*, profiles(name)')
-      .eq('id', id)
-      .single()
-
-    setNotice(noticeData)
+    const { data } = await supabase
+      .from('notices').select('*, profiles(name)').eq('id', id).single()
+    setNotice(data)
     setLoading(false)
   }, [id, supabase])
 
   const markAsRead = useCallback(async () => {
     if (!profile) return
-    const { error } = await supabase.from('notice_reads').upsert({
-      notice_id: id as string,
-      user_id: profile.id,
-    }, { onConflict: 'notice_id,user_id' })
-
-    if (error) console.error('읽음 처리 실패:', error)
+    await supabase.from('notice_reads').upsert(
+      { notice_id: id as string, user_id: profile.id },
+      { onConflict: 'notice_id,user_id' }
+    )
   }, [profile, id, supabase])
 
   useEffect(() => {
@@ -55,7 +48,6 @@ export default function NoticeDetailPage() {
     markAsRead()
   }, [profile, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 탭 복귀 시 공지 내용만 갱신 (읽음 처리는 최초 1회면 충분하므로 재실행 안 함)
   usePageVisibilityRefetch(fetchNotice, { enabled: !!profile, debounceMs: 3000 })
 
   const handleDelete = async () => {
@@ -79,25 +71,25 @@ export default function NoticeDetailPage() {
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       {profile?.role === 'admin' && (
-        <div className="flex justify-end gap-2 mb-3">
+        <div className="flex justify-end gap-2 mb-4">
           <a href={`/notices/${id}/edit`}
-            className="text-xs font-black text-white px-3 py-1.5 rounded-lg btn-press"
-            style={{ background: 'var(--ski-blue)' }}>
+            className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
+            style={{ background: 'var(--dku-blue-primary)', color: '#fff' }}>
             수정
           </a>
           <button onClick={handleDelete}
             className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
-            style={{ background: 'rgba(242,48,48,0.15)', color: '#FF6B6B' }}>
+            style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)', color: 'var(--accent-red)' }}>
             삭제
           </button>
         </div>
       )}
 
       <div className="rounded-2xl p-5 mb-4"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+        style={{ background: '#fff', border: '1px solid var(--border-primary)', boxShadow: 'var(--shadow-sm)' }}>
         {notice.is_pinned && (
           <span className="text-xs font-black px-2 py-0.5 rounded-full mb-3 inline-block"
-            style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
+            style={{ background: 'var(--ski-blue-50)', color: 'var(--dku-blue-primary)' }}>
             고정
           </span>
         )}
@@ -107,7 +99,7 @@ export default function NoticeDetailPage() {
         </h1>
 
         <div className="flex items-center justify-between mb-4 pb-4"
-          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
+          style={{ borderBottom: '1px solid var(--border-primary)' }}>
           <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
             {notice.profiles?.name}
           </span>
@@ -132,12 +124,12 @@ export default function NoticeDetailPage() {
           <a href={notice.file_url} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-3 mt-4 p-3 rounded-xl btn-press"
             style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '0.5px solid var(--border-primary)',
+              background: 'var(--surface-low)',
+              border: '1px solid var(--border-primary)',
             }}>
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(27,63,171,0.2)' }}>
-              <span className="text-sm" style={{ color: 'var(--accent-blue)' }}>📎</span>
+              style={{ background: 'var(--ski-blue-50)' }}>
+              <span className="text-sm">📎</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-secondary)' }}>
@@ -145,8 +137,7 @@ export default function NoticeDetailPage() {
               </p>
               <p className="text-xs" style={{ color: 'var(--text-hint)' }}>클릭하여 다운로드</p>
             </div>
-            <span className="text-xs font-black flex-shrink-0"
-              style={{ color: 'var(--text-hint)' }}>↓</span>
+            <span className="text-xs font-black flex-shrink-0" style={{ color: 'var(--text-hint)' }}>↓</span>
           </a>
         )}
       </div>

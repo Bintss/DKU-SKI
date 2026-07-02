@@ -11,10 +11,7 @@ type Notice = {
   title: string
   content: string
   image_url: string | null
-  file_url: string | null
-  file_name: string | null
   is_pinned: boolean
-  author_id: string
   created_at: string
   profiles: { name: string } | null
 }
@@ -33,37 +30,29 @@ export default function NoticesPage() {
         .select('*, profiles(name)')
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false }),
-      supabase.from('notice_reads')
-        .select('notice_id')
-        .eq('user_id', profile.id),
+      supabase.from('notice_reads').select('notice_id').eq('user_id', profile.id),
     ])
-
     setNotices(noticeData ?? [])
     const readSet = new Set(readData?.map(r => r.notice_id) ?? [])
     setUnreadIds(new Set((noticeData ?? []).filter(n => !readSet.has(n.id)).map(n => n.id)))
     setLoading(false)
   }, [profile, supabase])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
-
+  useEffect(() => { fetchData() }, [fetchData])
   usePageVisibilityRefetch(fetchData, { enabled: !!profile })
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+    const diff = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24))
     if (diff === 0) return '오늘'
     if (diff === 1) return '어제'
     if (diff < 7) return `${diff}일 전`
-    return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+    return new Date(dateStr).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
   }
 
   if (profileLoading || loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="h-8 rounded-full w-24 mb-5 animate-pulse"
-        style={{ background: 'rgba(255,255,255,0.06)' }} />
+        style={{ background: 'var(--surface-low)' }} />
       <SkeletonNotice />
     </main>
   )
@@ -78,8 +67,8 @@ export default function NoticesPage() {
         </div>
         {profile?.role === 'admin' && (
           <a href="/notices/new"
-            className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press"
-            style={{ background: 'var(--ski-blue)' }}>
+            className="text-xs font-black px-4 py-2 rounded-xl btn-press"
+            style={{ background: 'var(--dku-blue-primary)', color: '#fff' }}>
             + 작성
           </a>
         )}
@@ -87,8 +76,6 @@ export default function NoticesPage() {
 
       {notices.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-4xl font-black mb-2"
-            style={{ color: 'rgba(255,255,255,0.05)' }}>NO NOTICE</p>
           <p className="text-sm" style={{ color: 'var(--text-hint)' }}>등록된 공지사항이 없어요</p>
         </div>
       ) : (
@@ -99,36 +86,37 @@ export default function NoticesPage() {
               <a key={notice.id} href={`/notices/${notice.id}`}
                 className="block rounded-2xl p-5 card-hover btn-press"
                 style={{
-                  background: isUnread ? 'rgba(27,63,171,0.12)' : 'var(--bg-card)',
-                  border: `0.5px solid ${isUnread ? 'rgba(27,63,171,0.3)' : 'var(--border-primary)'}`,
+                  background: isUnread ? 'rgba(0,60,117,0.04)' : '#fff',
+                  border: `1px solid ${isUnread ? 'var(--dku-blue-light)' : 'var(--border-primary)'}`,
+                  boxShadow: 'var(--shadow-sm)',
                 }}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       {notice.is_pinned && (
                         <span className="text-xs font-black px-2 py-0.5 rounded-full"
-                          style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
+                          style={{ background: 'var(--ski-blue-50)', color: 'var(--dku-blue-primary)' }}>
                           고정
                         </span>
                       )}
                       {isUnread && (
                         <span className="text-xs font-black px-2 py-0.5 rounded-full"
-                          style={{ background: 'rgba(242,48,48,0.2)', color: '#FF6B6B' }}>
+                          style={{ background: 'rgba(220,38,38,0.1)', color: 'var(--accent-red)' }}>
                           NEW
                         </span>
                       )}
                     </div>
                     <p className="text-sm font-bold mb-1 truncate"
-                      style={{ color: isUnread ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                      style={{ color: 'var(--text-primary)' }}>
                       {notice.title}
                     </p>
-                    <p className="text-xs truncate" style={{ color: 'var(--text-hint)' }}>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>
                       {notice.content}
                     </p>
                   </div>
                   {isUnread && (
                     <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1"
-                      style={{ background: '#FF6B6B' }} />
+                      style={{ background: 'var(--dku-blue)' }} />
                   )}
                 </div>
                 <div className="flex items-center justify-between mt-3">

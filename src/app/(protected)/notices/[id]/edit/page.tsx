@@ -26,25 +26,24 @@ export default function EditNoticePage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const inputStyle = {
-    background: 'var(--bg-secondary)',
-    border: '0.5px solid var(--border-primary)',
+    background: '#fff',
+    border: '1px solid var(--border-primary)',
     color: 'var(--text-primary)',
+    borderRadius: '12px',
+    padding: '12px 16px',
+    fontSize: '14px',
+    width: '100%',
+    outline: 'none',
   }
 
   useEffect(() => {
     if (!profile) return
-    // 운영진이 아니면 접근 차단
     if (profile.role !== 'admin') { router.push('/notices'); return }
-
     const fetchNotice = async () => {
       const { data } = await supabase.from('notices').select('*').eq('id', id).single()
       if (data) {
-        setTitle(data.title)
-        setContent(data.content)
-        setIsPinned(data.is_pinned)
-        setImageUrl(data.image_url ?? '')
-        setFileUrl(data.file_url ?? '')
-        setFileName(data.file_name ?? '')
+        setTitle(data.title); setContent(data.content); setIsPinned(data.is_pinned)
+        setImageUrl(data.image_url ?? ''); setFileUrl(data.file_url ?? ''); setFileName(data.file_name ?? '')
       }
       setLoading(false)
     }
@@ -59,8 +58,7 @@ export default function EditNoticePage() {
     const { error } = await supabase.storage.from('notices').upload(uploadName, file)
     if (error) { setError('이미지 업로드에 실패했어요'); setImageUploading(false); return }
     const { data } = supabase.storage.from('notices').getPublicUrl(uploadName)
-    setImageUrl(data.publicUrl)
-    setImageUploading(false)
+    setImageUrl(data.publicUrl); setImageUploading(false)
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,24 +69,17 @@ export default function EditNoticePage() {
     const { error } = await supabase.storage.from('notices').upload(uploadName, file)
     if (error) { setError('파일 업로드에 실패했어요'); setFileUploading(false); return }
     const { data } = supabase.storage.from('notices').getPublicUrl(uploadName)
-    setFileUrl(data.publicUrl)
-    setFileName(file.name)
-    setFileUploading(false)
+    setFileUrl(data.publicUrl); setFileName(file.name); setFileUploading(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSubmitting(true)
-    setError('')
-
+    setSubmitting(true); setError('')
     const { error } = await supabase.from('notices').update({
       title, content, is_pinned: isPinned,
-      image_url: imageUrl || null,
-      file_url: fileUrl || null,
-      file_name: fileName || null,
+      image_url: imageUrl || null, file_url: fileUrl || null, file_name: fileName || null,
       updated_at: new Date().toISOString(),
     }).eq('id', id as string)
-
     if (error) { setError(error.message); setSubmitting(false); return }
     router.push(`/notices/${id}`)
   }
@@ -112,15 +103,14 @@ export default function EditNoticePage() {
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>제목</label>
           <input type="text" value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
+            style={inputStyle} required />
         </div>
 
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>내용</label>
           <textarea value={content} onChange={e => setContent(e.target.value)} rows={8}
-            className="w-full rounded-xl px-4 py-3 text-sm resize-none"
-            style={inputStyle} required />
+            style={{ ...inputStyle, resize: 'none', lineHeight: 1.6 }} required />
         </div>
 
         {/* 이미지 */}
@@ -132,7 +122,7 @@ export default function EditNoticePage() {
               <img src={imageUrl} alt="미리보기" className="w-full h-48 object-cover rounded-xl" />
               <button type="button" onClick={() => setImageUrl('')}
                 className="absolute top-2 right-2 text-xs font-black px-2.5 py-1.5 rounded-lg btn-press"
-                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}>
                 삭제
               </button>
             </div>
@@ -140,19 +130,17 @@ export default function EditNoticePage() {
             <button type="button" onClick={() => imageInputRef.current?.click()}
               disabled={imageUploading}
               className="w-full h-28 rounded-xl flex flex-col items-center justify-center gap-2 btn-press"
-              style={{ border: '1px dashed var(--border-secondary)', background: 'var(--bg-card)' }}>
-              {imageUploading ? (
-                <p className="text-sm" style={{ color: 'var(--text-hint)' }}>업로드 중...</p>
-              ) : (
-                <>
-                  <span className="text-2xl">📷</span>
-                  <p className="text-sm" style={{ color: 'var(--text-hint)' }}>사진 추가</p>
-                </>
-              )}
+              style={{ border: '1.5px dashed var(--border-secondary)', background: 'var(--surface-low)' }}>
+              {imageUploading
+                ? <p className="text-sm" style={{ color: 'var(--text-hint)' }}>업로드 중...</p>
+                : <>
+                    <span className="text-2xl">🖼️</span>
+                    <p className="text-sm font-bold" style={{ color: 'var(--text-tertiary)' }}>사진 추가</p>
+                  </>
+              }
             </button>
           )}
-          <input ref={imageInputRef} type="file" accept="image/*"
-            onChange={handleImageUpload} className="hidden" />
+          <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
         </div>
 
         {/* 파일 */}
@@ -161,13 +149,11 @@ export default function EditNoticePage() {
             style={{ color: 'var(--text-hint)' }}>파일 첨부</label>
           {fileUrl ? (
             <div className="flex items-center gap-3 p-3 rounded-xl"
-              style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+              style={{ background: '#fff', border: '1px solid var(--border-primary)' }}>
               <span className="text-lg">📎</span>
-              <p className="text-sm flex-1 truncate" style={{ color: 'var(--text-secondary)' }}>
-                {fileName}
-              </p>
+              <p className="text-sm flex-1 truncate" style={{ color: 'var(--text-secondary)' }}>{fileName}</p>
               <button type="button" onClick={() => { setFileUrl(''); setFileName('') }}
-                className="text-xs font-black btn-press" style={{ color: '#FF6B6B' }}>
+                className="text-xs font-black btn-press" style={{ color: 'var(--accent-red)' }}>
                 삭제
               </button>
             </div>
@@ -175,37 +161,41 @@ export default function EditNoticePage() {
             <button type="button" onClick={() => fileInputRef.current?.click()}
               disabled={fileUploading}
               className="w-full h-16 rounded-xl flex items-center justify-center gap-2 btn-press"
-              style={{ border: '1px dashed var(--border-secondary)', background: 'var(--bg-card)' }}>
-              {fileUploading ? (
-                <p className="text-sm" style={{ color: 'var(--text-hint)' }}>업로드 중...</p>
-              ) : (
-                <>
-                  <span className="text-lg">📎</span>
-                  <p className="text-sm" style={{ color: 'var(--text-hint)' }}>파일 첨부</p>
-                </>
-              )}
+              style={{ border: '1.5px dashed var(--border-secondary)', background: 'var(--surface-low)' }}>
+              {fileUploading
+                ? <p className="text-sm" style={{ color: 'var(--text-hint)' }}>업로드 중...</p>
+                : <>
+                    <span className="text-lg">📎</span>
+                    <p className="text-sm font-bold" style={{ color: 'var(--text-tertiary)' }}>파일 첨부</p>
+                  </>
+              }
             </button>
           )}
           <input ref={fileInputRef} type="file" onChange={handleFileUpload} className="hidden" />
         </div>
 
-        {/* 상단 고정 */}
+        {/* 상단 고정 토글 */}
         <div className="flex items-center justify-between rounded-xl px-4 py-3"
-          style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+          style={{ background: '#fff', border: '1px solid var(--border-primary)' }}>
           <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>상단 고정</p>
           <button type="button" onClick={() => setIsPinned(!isPinned)}
             className="relative w-12 h-6 rounded-full transition-all duration-200 flex-shrink-0"
-            style={{ background: isPinned ? 'var(--ski-blue)' : 'rgba(255,255,255,0.1)' }}>
+            style={{ background: isPinned ? 'var(--dku-blue-primary)' : 'var(--border-secondary)' }}>
             <span className="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200"
               style={{ left: isPinned ? '28px' : '4px' }} />
           </button>
         </div>
 
-        {error && <p className="text-xs" style={{ color: 'var(--accent-red)' }}>{error}</p>}
+        {error && (
+          <div className="rounded-xl px-4 py-3"
+            style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.15)' }}>
+            <p className="text-xs font-bold" style={{ color: 'var(--accent-red)' }}>{error}</p>
+          </div>
+        )}
 
         <button type="submit" disabled={submitting}
-          className="w-full text-white rounded-xl py-3.5 text-sm font-black disabled:opacity-50 btn-press"
-          style={{ background: 'var(--ski-blue)' }}>
+          className="w-full rounded-xl py-3.5 text-sm font-black disabled:opacity-50 btn-press"
+          style={{ background: 'var(--dku-blue-primary)', color: '#fff' }}>
           {submitting ? '저장 중...' : '저장하기'}
         </button>
       </form>
