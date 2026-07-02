@@ -12,9 +12,15 @@ type Member = {
   generation: number
   role: string
   join_type: string
-  student_id: string | null
+  ski_level: string | null
   bio: string | null
   avatar_url: string | null
+  affiliation: string | null
+}
+
+const SKI_LEVEL_LABEL: Record<string, string> = {
+  beginner: '처음', novice: '초급', intermediate: '중급',
+  advanced: '상급', certified: '자격증',
 }
 
 export default function MembersPage() {
@@ -23,190 +29,172 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'student' | 'ob'>('all')
-  const [selectedGeneration, setSelectedGeneration] = useState<number | null>(null)
   const supabase = createClient()
 
   const fetchData = useCallback(async () => {
     const { data } = await supabase
       .from('profiles')
-      .select('id, name, generation, role, join_type, student_id, bio, avatar_url')
-      .neq('role', 'pending')
-      .neq('role', 'withdrawn')
+      .select('id, name, generation, role, join_type, ski_level, bio, avatar_url, affiliation')
+      .not('role', 'in', '("pending","withdrawn")')
       .order('generation', { ascending: false })
       .order('name')
     setMembers(data ?? [])
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
-
+  useEffect(() => { fetchData() }, [fetchData])
   usePageVisibilityRefetch(fetchData)
 
-  // 클라이언트 사이드 필터링
-  const generations = [...new Set(members.map(m => m.generation))].sort((a, b) => b - a)
-
   const filtered = members.filter(m => {
-    const matchSearch = !search ||
+    const matchSearch = search === '' ||
       m.name.includes(search) ||
-      String(m.generation).includes(search)
-    const matchType = filterType === 'all' || m.join_type === filterType
-    const matchGen = selectedGeneration === null || m.generation === selectedGeneration
-    return matchSearch && matchType && matchGen
+      String(m.generation).includes(search) ||
+      (m.affiliation ?? '').includes(search)
+    const matchType = filterType === 'all' ||
+      (filterType === 'student' && m.join_type === 'student') ||
+      (filterType === 'ob' && (m.join_type === 'ob' || m.role === 'ob'))
+    return matchSearch && matchType
   })
 
-  const grouped = filtered.reduce((acc, m) => {
-    if (!acc[m.generation]) acc[m.generation] = []
-    acc[m.generation].push(m)
+  const generationGroups = filtered.reduce((acc, m) => {
+    const gen = m.generation
+    if (!acc[gen]) acc[gen] = []
+    acc[gen].push(m)
     return acc
   }, {} as Record<number, Member[]>)
 
-  const roleLabel: Record<string, string> = {
-    member: '부원', ob: 'OB', admin: '운영진'
-  }
-
-  const roleColor: Record<string, string> = {
-    member: 'rgba(27,63,171,0.3)',
-    ob: 'rgba(155,89,182,0.3)',
-    admin: 'rgba(230,126,34,0.3)',
-  }
-
-  const roleTextColor: Record<string, string> = {
-    member: 'var(--accent-blue)',
-    ob: 'var(--accent-purple)',
-    admin: 'var(--accent-orange)',
-  }
-
-  const filterBtnStyle = (active: boolean) => ({
-    background: active ? 'var(--ski-blue)' : 'var(--bg-card)',
-    border: `0.5px solid ${active ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
-    color: active ? '#fff' : 'var(--text-tertiary)',
-  })
+  const sortedGenerations = Object.keys(generationGroups)
+    .map(Number)
+    .sort((a, b) => b - a)
 
   if (profileLoading || loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      <div className="h-8 rounded-full w-32 mb-5 animate-pulse"
-        style={{ background: 'rgba(255,255,255,0.06)' }} />
-      <SkeletonList count={5} />
+      <div className="h-8 rounded-full w-24 mb-5 animate-pulse"
+        style={{ background: 'var(--surface-low)' }} />
+      <SkeletonList count={4} />
     </main>
   )
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      <div className="mb-6">
+      <div className="mb-5">
         <p className="text-xs font-black tracking-widest uppercase mb-1"
-          style={{ color: 'var(--text-hint)' }}>Directory</p>
-        <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>
-          동문 디렉토리
-        </h1>
+          style={{ color: 'var(--text-hint)' }}>Members</p>
+        <h1 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>동문 찾기</h1>
       </div>
 
       {/* 검색 */}
-      <input type="text" placeholder="이름, 기수 검색"
-        value={search} onChange={e => setSearch(e.target.value)}
-        className="w-full rounded-xl px-4 py-3 text-sm mb-3"
-        style={{
-          background: 'var(--bg-secondary)',
-          border: '0.5px solid var(--border-primary)',
-          color: 'var(--text-primary)',
-        }} />
+      <div className="relative mb-3">
+        <svg className="absolute left-4 top-1/2 -translate-y-1/2" width="16" height="16"
+          viewBox="0 0 24 24" fill="none" stroke="var(--text-hint)"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8" />
+          <path d="M21 21l-4.35-4.35" />
+        </svg>
+        <input type="text" placeholder="이름, 기수, 소속으로 검색"
+          value={search} onChange={e => setSearch(e.target.value)}
+          className="w-full rounded-xl pl-10 pr-4 py-3 text-sm"
+          style={{
+            background: '#fff',
+            border: '1px solid var(--border-primary)',
+            color: 'var(--text-primary)',
+            outline: 'none',
+          }} />
+      </div>
 
-      {/* 타입 필터 */}
-      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+      {/* 필터 */}
+      <div className="flex gap-2 mb-5">
         {[
-          { value: 'all', label: `전체 ${members.length}명` },
-          { value: 'student', label: `재학생 ${members.filter(m => m.join_type === 'student').length}명` },
-          { value: 'ob', label: `OB ${members.filter(m => m.join_type === 'ob').length}명` },
-        ].map(f => (
-          <button key={f.value}
-            onClick={() => setFilterType(f.value as 'all' | 'student' | 'ob')}
-            className="text-xs font-bold px-3 py-1.5 rounded-full flex-shrink-0 transition-all btn-press"
-            style={filterBtnStyle(filterType === f.value)}>
-            {f.label}
+          { value: 'all', label: `전체 ${members.length}` },
+          { value: 'student', label: `재학생 ${members.filter(m => m.join_type === 'student').length}` },
+          { value: 'ob', label: `OB ${members.filter(m => m.join_type === 'ob' || m.role === 'ob').length}` },
+        ].map(opt => (
+          <button key={opt.value}
+            onClick={() => setFilterType(opt.value as typeof filterType)}
+            className="px-4 py-2 rounded-full text-xs font-black btn-press"
+            style={{
+              background: filterType === opt.value ? 'var(--dku-blue-primary)' : '#fff',
+              border: `1px solid ${filterType === opt.value ? 'var(--dku-blue-primary)' : 'var(--border-primary)'}`,
+              color: filterType === opt.value ? '#fff' : 'var(--text-tertiary)',
+            }}>
+            {opt.label}
           </button>
         ))}
       </div>
 
-      {/* 기수 필터 */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        <button onClick={() => setSelectedGeneration(null)}
-          className="text-xs font-bold px-3 py-1.5 rounded-full flex-shrink-0 transition-all btn-press"
-          style={filterBtnStyle(selectedGeneration === null)}>
-          전체 기수
-        </button>
-        {generations.map(gen => (
-          <button key={gen}
-            onClick={() => setSelectedGeneration(selectedGeneration === gen ? null : gen)}
-            className="text-xs font-bold px-3 py-1.5 rounded-full flex-shrink-0 transition-all btn-press"
-            style={filterBtnStyle(selectedGeneration === gen)}>
-            {gen}기
-          </button>
-        ))}
-      </div>
-
-      {/* 부원 목록 */}
-      {Object.keys(grouped).length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-4xl font-black mb-2"
-            style={{ color: 'rgba(255,255,255,0.04)' }}>NO RESULT</p>
-          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>검색 결과가 없어요</p>
+          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
+            {search ? `"${search}" 검색 결과가 없어요` : '부원이 없어요'}
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          {Object.entries(grouped)
-            .sort(([a], [b]) => Number(b) - Number(a))
-            .map(([gen, genMembers]) => (
-              <div key={gen}>
-                <p className="text-xs font-black tracking-widest uppercase mb-3"
-                  style={{ color: 'var(--text-hint)' }}>{gen}기</p>
-                <div className="flex flex-col gap-2">
-                  {genMembers.map(m => (
-                    <a key={m.id} href={`/members/${m.id}`}
-                      className="flex items-center gap-3 rounded-2xl px-4 py-3.5 card-hover btn-press"
-                      style={{
-                        background: 'var(--bg-card)',
-                        border: '0.5px solid var(--border-primary)',
-                      }}>
-                      {m.avatar_url ? (
-                        <img src={m.avatar_url} alt={m.name}
-                          className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-black flex-shrink-0"
-                          style={{ background: m.id === profile?.id ? 'var(--accent-green)' : 'var(--ski-blue)' }}>
-                          {m.name[0]}
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                            {m.name}
-                          </p>
-                          {m.id === profile?.id && (
-                            <span className="text-xs font-black"
-                              style={{ color: 'var(--accent-green)' }}>나</span>
-                          )}
-                          <span className="text-xs font-black px-2 py-0.5 rounded-full"
-                            style={{
-                              background: roleColor[m.role] ?? 'rgba(255,255,255,0.06)',
-                              color: roleTextColor[m.role] ?? 'var(--text-tertiary)',
-                            }}>
-                            {roleLabel[m.role] ?? m.role}
+          {sortedGenerations.map(gen => (
+            <div key={gen}>
+              <p className="text-xs font-black tracking-widest uppercase mb-3"
+                style={{ color: 'var(--text-hint)' }}>
+                {gen}기 · {generationGroups[gen].length}명
+              </p>
+              <div className="flex flex-col gap-2">
+                {generationGroups[gen].map(member => (
+                  <a key={member.id} href={`/members/${member.id}`}
+                    className="flex items-center gap-3 rounded-2xl p-4 card-hover btn-press"
+                    style={{ background: '#fff', border: '1px solid var(--border-primary)', boxShadow: 'var(--shadow-sm)' }}>
+                    {member.avatar_url ? (
+                      <img src={member.avatar_url} alt={member.name}
+                        className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full flex items-center justify-center text-base font-black flex-shrink-0"
+                        style={{ background: 'var(--dku-blue-primary)', color: '#fff' }}>
+                        {member.name[0]}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>
+                          {member.name}
+                        </p>
+                        {member.role === 'admin' && (
+                          <span className="text-xs font-black px-1.5 py-0.5 rounded-full"
+                            style={{ background: 'rgba(217,119,6,0.1)', color: 'var(--accent-orange)' }}>
+                            운영진
                           </span>
-                        </div>
-                        {m.bio && (
-                          <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-hint)' }}>
-                            {m.bio}
-                          </p>
+                        )}
+                        {(member.role === 'ob' || member.join_type === 'ob') && member.role !== 'admin' && (
+                          <span className="text-xs font-black px-1.5 py-0.5 rounded-full"
+                            style={{ background: 'rgba(124,58,237,0.1)', color: 'var(--accent-purple)' }}>
+                            OB
+                          </span>
                         )}
                       </div>
-                      <span className="text-xs font-bold flex-shrink-0"
-                        style={{ color: 'var(--text-hint)' }}>›</span>
-                    </a>
-                  ))}
-                </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {member.affiliation && (
+                          <span className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>
+                            {member.affiliation}
+                          </span>
+                        )}
+                        {member.ski_level && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                            style={{ background: 'var(--ski-blue-50)', color: 'var(--dku-blue-primary)' }}>
+                            {SKI_LEVEL_LABEL[member.ski_level] ?? member.ski_level}
+                          </span>
+                        )}
+                      </div>
+                      {member.bio && (
+                        <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-hint)' }}>
+                          {member.bio}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-xs font-bold flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                      →
+                    </span>
+                  </a>
+                ))}
               </div>
-            ))}
+            </div>
+          ))}
         </div>
       )}
     </main>

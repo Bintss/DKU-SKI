@@ -12,18 +12,19 @@ type Post = {
   title: string
   content: string
   channel: string
-  image_url: string | null
   is_anonymous: boolean
-  author_id: string
   created_at: string
+  author_id: string
+  image_urls: string[] | null
   profiles: { name: string; generation: number; avatar_url: string | null } | null
 }
 
 type Comment = {
   id: string
   content: string
-  author_id: string
+  is_anonymous: boolean
   created_at: string
+  author_id: string
   profiles: { name: string; generation: number; avatar_url: string | null } | null
 }
 
@@ -41,12 +42,13 @@ export default function PostDetailPage() {
   const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
+  const [isAnonymous, setIsAnonymous] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const commentInputRef = useRef<HTMLInputElement>(null)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const commentInputRef = useRef<HTMLTextAreaElement>(null)
 
   const fetchData = useCallback(async () => {
     if (!profile) return
-
     const [{ data: postData }, { data: commentData }] = await Promise.all([
       supabase.from('posts')
         .select('*, profiles(name, generation, avatar_url)')
@@ -56,30 +58,33 @@ export default function PostDetailPage() {
         .eq('post_id', id)
         .order('created_at', { ascending: true }),
     ])
-
     setPost(postData)
     setComments(commentData ?? [])
     setLoading(false)
   }, [profile, id, supabase])
 
-  useEffect(() => {
-    if (profile) fetchData()
-  }, [profile, fetchData])
-
+  useEffect(() => { if (profile) fetchData() }, [profile, fetchData])
   usePageVisibilityRefetch(fetchData, { enabled: !!profile, debounceMs: 3000 })
-  
-  const getAuthorDisplay = (isAnonymous: boolean, profiles: Post['profiles']) => {
-    if (!isAnonymous) return {
-      name: profiles?.name ?? '알 수 없음',
-      generation: profiles?.generation ?? null,
-      avatar_url: profiles?.avatar_url ?? null,
+
+  const getAuthorDisplay = (item: { is_anonymous: boolean; profiles: { name: string; generation: number } | null; author_id: string }) => {
+    if (!item.is_anonymous) {
+      return {
+        name: item.profiles?.name ?? '알 수 없음',
+        sub: item.profiles?.generation ? `${item.profiles.generation}기` : '',
+        isAnon: false,
+      }
     }
-    if (profile?.role === 'admin') return {
-      name: `${profiles?.name} (익명)`,
-      generation: profiles?.generation ?? null,
-      avatar_url: profiles?.avatar_url ?? null,
+    if (profile?.role === 'admin') {
+      return {
+        name: `${item.profiles?.name ?? '알 수 없음'} (익명)`,
+        sub: item.profiles?.generation ? `${item.profiles.generation}기` : '',
+        isAnon: true,
+      }
     }
-    return { name: '익명', generation: null, avatar_url: null }
+    if (item.author_id === profile?.id) {
+      return { name: '익명 (나)', sub: '', isAnon: true }
+    }
+    return { name: '익명', sub: '', isAnon: true }
   }
 
   const handleDeletePost = async () => {
@@ -88,44 +93,29 @@ export default function PostDetailPage() {
     router.push('/community')
   }
 
-  const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleAddComment = async () => {
     if (!newComment.trim() || !profile) return
     setSubmitting(true)
-
     await supabase.from('comments').insert({
-      post_id: id as string,
-      author_id: profile.id,
-      content: newComment.trim(),
+      post_id: id, content: newComment.trim(),
+      author_id: profile.id, is_anonymous: isAnonymous,
     })
-
     setNewComment('')
     setSubmitting(false)
-    await fetchData()
-    // 댓글 등록 후 입력창 포커스
-    commentInputRef.current?.focus()
+    fetchData()
   }
 
   const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('댓글을 삭제할까요?')) return
     await supabase.from('comments').delete().eq('id', commentId)
     fetchData()
   }
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
-    if (diff === 0) {
-      const diffH = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
-      if (diffH === 0) {
-        const diffM = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
-        return diffM <= 1 ? '방금' : `${diffM}분 전`
-      }
-      return `${diffH}시간 전`
-    }
-    if (diff === 1) return '어제'
-    return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
-  }
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('ko-KR', {
+      year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    })
 
   if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -139,17 +129,18 @@ export default function PostDetailPage() {
     </div>
   )
 
-  const canDelete = profile?.id === post.author_id || profile?.role === 'admin'
-  const author = getAuthorDisplay(post.is_anonymous, post.profiles)
+  const isPostAuthor = post.author_id === profile?.id
+  const postAuthor = getAuthorDisplay(post)
 
   return (
-    <main className="max-w-lg mx-auto px-4 pb-10">
+    <main className="max-w-lg mx-auto px-4 pb-32">
       <div className="flex items-center justify-between mb-4">
         <Link href="/community" className="text-xs font-semibold"
-          style={{ color: 'var(--text-tertiary)' }}>← 목록</Link>
-        {canDelete && (
+          style={{ color: 'var(--text-tertiary)' }}>← 커뮤니티</Link>
+        {(isPostAuthor || profile?.role === 'admin') && (
           <button onClick={handleDeletePost}
-            className="text-xs font-black btn-press" style={{ color: '#FF6B6B' }}>
+            className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
+            style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)', color: 'var(--accent-red)' }}>
             삭제
           </button>
         )}
@@ -157,135 +148,187 @@ export default function PostDetailPage() {
 
       {/* 게시글 */}
       <div className="rounded-2xl p-5 mb-4"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-        <span className="text-xs font-black px-2.5 py-1 rounded-full mb-3 inline-block"
-          style={{ background: 'rgba(27,63,171,0.3)', color: 'var(--accent-blue)' }}>
-          {CHANNEL_LABEL[post.channel]}
-        </span>
-
-        <h1 className="text-lg font-black mb-3" style={{ color: 'var(--text-primary)' }}>
-          {post.title}
-        </h1>
-
-        <div className="flex items-center gap-2 mb-4 pb-4"
-          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
-          {author.avatar_url ? (
-            <img src={author.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
-          ) : (
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black"
-              style={{
-                background: post.is_anonymous && profile?.role !== 'admin'
-                  ? 'rgba(255,255,255,0.1)' : 'var(--ski-blue)'
-              }}>
-              {author.name[0]}
-            </div>
-          )}
-          <span className="text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>
-            {author.name}
+        style={{ background: '#fff', border: '1px solid var(--border-primary)', boxShadow: 'var(--shadow-sm)' }}>
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-xs font-black px-2 py-0.5 rounded-full"
+            style={{ background: 'var(--ski-blue-50)', color: 'var(--dku-blue-primary)' }}>
+            {CHANNEL_LABEL[post.channel] ?? post.channel}
           </span>
-          {author.generation && (
-            <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
-              {author.generation}기
-            </span>
-          )}
-          {post.is_anonymous && profile?.role === 'admin' && (
-            <span className="text-xs font-black px-1.5 py-0.5 rounded-full"
-              style={{ background: 'rgba(230,126,34,0.2)', color: 'var(--accent-orange)' }}>
-              익명
-            </span>
-          )}
-          <span className="text-xs ml-auto" style={{ color: 'var(--text-hint)' }}>
+          <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
             {formatDate(post.created_at)}
           </span>
         </div>
 
-        {post.image_url && (
-          <img src={post.image_url} alt="" className="w-full rounded-xl mb-4 object-cover" />
-        )}
+        <h1 className="text-xl font-black mb-3" style={{ color: 'var(--text-primary)' }}>
+          {post.title}
+        </h1>
 
-        <p className="text-sm leading-relaxed whitespace-pre-wrap"
+        <div className="flex items-center gap-2.5 mb-4 pb-4"
+          style={{ borderBottom: '1px solid var(--border-primary)' }}>
+          {postAuthor.isAnon ? (
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0"
+              style={{ background: 'var(--surface-low)', color: 'var(--text-tertiary)' }}>
+              ?
+            </div>
+          ) : post.profiles?.avatar_url ? (
+            <img src={post.profiles.avatar_url} alt=""
+              className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0"
+              style={{ background: 'var(--dku-blue-primary)', color: '#fff' }}>
+              {postAuthor.name[0]}
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+              {postAuthor.name}
+            </p>
+            {postAuthor.sub && (
+              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{postAuthor.sub}</p>
+            )}
+          </div>
+        </div>
+
+        <p className="text-sm leading-relaxed whitespace-pre-wrap mb-4"
           style={{ color: 'var(--text-secondary)' }}>
           {post.content}
         </p>
-      </div>
 
-      {/* 댓글 */}
-      <div className="rounded-2xl p-5"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-        <h2 className="text-xs font-black tracking-widest uppercase mb-4"
-          style={{ color: 'var(--text-hint)' }}>
-          댓글 <span style={{ color: 'var(--text-tertiary)' }}>{comments.length}</span>
-        </h2>
-
-        {comments.length === 0 ? (
-          <p className="text-sm text-center py-4" style={{ color: 'var(--text-hint)' }}>
-            첫 댓글을 남겨보세요
-          </p>
-        ) : (
-          <div className="flex flex-col gap-4 mb-5">
-            {comments.map(c => (
-              <div key={c.id} className="flex gap-2.5">
-                {c.profiles?.avatar_url ? (
-                  <img src={c.profiles.avatar_url} alt=""
-                    className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
-                ) : (
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
-                    style={{ background: 'var(--ski-blue)' }}>
-                    {c.profiles?.name?.[0] ?? '?'}
-                  </div>
-                )}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
-                      {c.profiles?.name}
-                    </span>
-                    <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                      {c.profiles?.generation}기
-                    </span>
-                    <span className="text-xs ml-auto" style={{ color: 'var(--text-hint)' }}>
-                      {formatDate(c.created_at)}
-                    </span>
-                    {(profile?.id === c.author_id || profile?.role === 'admin') && (
-                      <button onClick={() => handleDeleteComment(c.id)}
-                        className="text-xs font-black btn-press"
-                        style={{ color: 'rgba(255,107,107,0.5)' }}>
-                        삭제
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                    {c.content}
-                  </p>
-                </div>
-              </div>
+        {post.image_urls && post.image_urls.length > 0 && (
+          <div className="grid gap-2"
+            style={{ gridTemplateColumns: post.image_urls.length === 1 ? '1fr' : '1fr 1fr' }}>
+            {post.image_urls.map((url, i) => (
+              <img key={i} src={url} alt=""
+                className="w-full rounded-xl object-cover cursor-pointer"
+                style={{ maxHeight: 280 }}
+                onClick={() => setLightboxUrl(url)} />
             ))}
           </div>
         )}
+      </div>
 
-        {/* 댓글 입력 */}
-        <form onSubmit={handleAddComment} className="flex gap-2"
-          style={{ borderTop: '0.5px solid var(--border-primary)', paddingTop: '16px' }}>
-          <input
+      {/* 댓글 */}
+      <div className="rounded-2xl overflow-hidden mb-4"
+        style={{ background: '#fff', border: '1px solid var(--border-primary)', boxShadow: 'var(--shadow-sm)' }}>
+        <div className="px-5 py-4"
+          style={{ borderBottom: comments.length > 0 ? '1px solid var(--border-primary)' : 'none' }}>
+          <p className="text-xs font-black tracking-widest uppercase"
+            style={{ color: 'var(--text-hint)' }}>
+            댓글 {comments.length}
+          </p>
+        </div>
+
+        {comments.map((comment, i) => {
+          const author = getAuthorDisplay(comment)
+          const isCommentAuthor = comment.author_id === profile?.id
+          return (
+            <div key={comment.id} className="px-5 py-4"
+              style={{ borderBottom: i < comments.length - 1 ? '1px solid var(--border-primary)' : 'none' }}>
+              <div className="flex items-start gap-2.5">
+                {author.isAnon ? (
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                    style={{ background: 'var(--surface-low)', color: 'var(--text-tertiary)' }}>
+                    ?
+                  </div>
+                ) : comment.profiles?.avatar_url ? (
+                  <img src={comment.profiles.avatar_url} alt=""
+                    className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                    style={{ background: 'var(--dku-blue-primary)', color: '#fff' }}>
+                    {author.name[0]}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
+                      {author.name}
+                    </span>
+                    {author.sub && (
+                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>{author.sub}</span>
+                    )}
+                    <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                      · {new Date(comment.created_at).toLocaleDateString('ko-KR', {
+                        month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                    {comment.content}
+                  </p>
+                </div>
+                {(isCommentAuthor || profile?.role === 'admin') && (
+                  <button onClick={() => handleDeleteComment(comment.id)}
+                    className="text-xs flex-shrink-0 btn-press" style={{ color: 'var(--text-hint)' }}>
+                    삭제
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* 댓글 입력 */}
+      <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto px-4 pb-6 pt-3"
+        style={{
+          background: 'rgba(255,255,255,0.95)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          borderTop: '1px solid var(--border-primary)',
+          boxShadow: '0 -2px 16px rgba(0,0,0,0.06)',
+        }}>
+        <div className="flex items-center gap-2 mb-2">
+          <button onClick={() => setIsAnonymous(!isAnonymous)}
+            className="text-xs font-black px-3 py-1.5 rounded-full btn-press"
+            style={{
+              background: isAnonymous ? 'var(--ski-blue-50)' : 'var(--surface-low)',
+              border: `1px solid ${isAnonymous ? 'var(--dku-blue-light)' : 'var(--border-primary)'}`,
+              color: isAnonymous ? 'var(--dku-blue-primary)' : 'var(--text-tertiary)',
+            }}>
+            {isAnonymous ? '익명 ON' : '익명 OFF'}
+          </button>
+          <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+            {isAnonymous ? '이름이 숨겨져요' : `${profile?.name}으로 댓글 달아요`}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <textarea
             ref={commentInputRef}
-            type="text"
-            placeholder="댓글을 입력해주세요"
             value={newComment}
             onChange={e => setNewComment(e.target.value)}
-            className="flex-1 rounded-xl px-3 py-2.5 text-sm"
-            style={{
-              background: 'var(--bg-secondary)',
-              border: '0.5px solid var(--border-primary)',
-              color: 'var(--text-primary)',
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                handleAddComment()
+              }
             }}
-          />
-          <button type="submit"
+            placeholder="댓글을 입력하세요..."
+            rows={1}
+            className="flex-1 rounded-xl px-4 py-2.5 text-sm resize-none"
+            style={{
+              background: 'var(--surface-low)',
+              border: '1px solid var(--border-primary)',
+              color: 'var(--text-primary)',
+              outline: 'none',
+            }} />
+          <button onClick={handleAddComment}
             disabled={submitting || !newComment.trim()}
-            className="text-white px-4 rounded-xl text-sm font-black disabled:opacity-50 flex-shrink-0 btn-press"
-            style={{ background: 'var(--ski-blue)' }}>
-            등록
+            className="rounded-xl px-4 py-2.5 text-sm font-black disabled:opacity-40 btn-press flex-shrink-0"
+            style={{ background: 'var(--dku-blue-primary)', color: '#fff' }}>
+            {submitting ? '...' : '등록'}
           </button>
-        </form>
+        </div>
       </div>
+
+      {/* 이미지 라이트박스 */}
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.9)' }}
+          onClick={() => setLightboxUrl(null)}>
+          <img src={lightboxUrl} alt="" className="max-w-full max-h-full rounded-2xl object-contain" />
+        </div>
+      )}
     </main>
   )
 }

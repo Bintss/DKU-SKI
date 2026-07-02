@@ -1,82 +1,101 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
+import { useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
 
-function NewPostForm() {
-  const searchParams = useSearchParams()
-  const initialChannel = searchParams.get('channel') ?? 'free'
+const CHANNELS = [
+  { value: 'free', label: '자유', desc: '모든 부원이 볼 수 있어요' },
+  { value: 'student', label: '재학생', desc: '재학생 부원만 볼 수 있어요' },
+  { value: 'ob', label: 'OB', desc: 'OB와 운영진만 볼 수 있어요' },
+]
 
-  const { profile } = useProfile()
-  const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
-  const [channel, setChannel] = useState(initialChannel)
-  const [isAnonymous, setIsAnonymous] = useState(false)
-  const [imageUrl, setImageUrl] = useState('')
-  const [imageUploading, setImageUploading] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const imageInputRef = useRef<HTMLInputElement>(null)
+export default function NewPostPage() {
+  const { profile, loading: profileLoading } = useProfile()
   const router = useRouter()
   const supabase = createClient()
 
+  const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
+  const [channel, setChannel] = useState('free')
+  const [isAnonymous, setIsAnonymous] = useState(false)
+  const [imageUrls, setImageUrls] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const inputStyle = {
-    background: 'var(--bg-secondary)',
-    border: '0.5px solid var(--border-primary)',
+    background: '#fff',
+    border: '1px solid var(--border-primary)',
     color: 'var(--text-primary)',
+    borderRadius: '12px',
+    padding: '12px 16px',
+    fontSize: '14px',
+    width: '100%',
+    outline: 'none',
   }
 
+  useEffect(() => {
+    if (!profile) return
+    if (profile.role === 'ob') setChannel('ob')
+    else setChannel('free')
+  }, [profile])
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setImageUploading(true)
-    const fileName = `${Date.now()}.${file.name.split('.').pop()}`
-    const { error } = await supabase.storage.from('posts').upload(fileName, file)
-    if (error) { setError('이미지 업로드에 실패했어요'); setImageUploading(false); return }
-    const { data } = supabase.storage.from('posts').getPublicUrl(fileName)
-    setImageUrl(data.publicUrl)
-    setImageUploading(false)
+    const files = Array.from(e.target.files ?? [])
+    if (files.length === 0) return
+    if (imageUrls.length + files.length > 5) {
+      setError('이미지는 최대 5장까지 첨부할 수 있어요')
+      return
+    }
+    setUploading(true)
+    const uploaded: string[] = []
+    for (const file of files) {
+      const ext = file.name.split('.').pop()
+      const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+      const { error } = await supabase.storage.from('posts').upload(fileName, file)
+      if (error) { setError('이미지 업로드에 실패했어요'); continue }
+      const { data } = supabase.storage.from('posts').getPublicUrl(fileName)
+      uploaded.push(data.publicUrl)
+    }
+    setImageUrls(prev => [...prev, ...uploaded])
+    setUploading(false)
+  }
+
+  const removeImage = (index: number) => {
+    setImageUrls(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!profile) return
-    setSubmitting(true)
-    setError('')
+    if (!profile || submitting) return
+    if (!title.trim()) { setError('제목을 입력해주세요'); return }
+    if (!content.trim()) { setError('내용을 입력해주세요'); return }
+    setSubmitting(true); setError('')
 
-    // 채널 접근 권한 체크
-    if (profile.role !== 'admin') {
-      if (channel === 'student' && profile.join_type !== 'student') {
-        setError('재학생만 작성할 수 있어요')
-        setSubmitting(false)
-        return
-      }
-      if (channel === 'ob' && profile.join_type !== 'ob') {
-        setError('OB만 작성할 수 있어요')
-        setSubmitting(false)
-        return
-      }
-    }
-
-    const { error } = await supabase.from('posts').insert({
-      title, content, channel,
-      is_anonymous: isAnonymous,
-      image_url: imageUrl || null,
+    const { data, error } = await supabase.from('posts').insert({
+      title: title.trim(), content: content.trim(),
+      channel, is_anonymous: isAnonymous,
       author_id: profile.id,
-    })
+      image_urls: imageUrls.length > 0 ? imageUrls : null,
+    }).select().single()
 
     if (error) { setError(error.message); setSubmitting(false); return }
-    router.push('/community')
+    router.push(`/community/${data.id}`)
   }
 
-  const CHANNELS = [
-    { value: 'free', label: '자유' },
-    { value: 'student', label: '재학생' },
-    { value: 'ob', label: 'OB' },
-  ]
+  const availableChannels = CHANNELS.filter(ch => {
+    if (ch.value === 'ob' && profile?.role !== 'admin' && profile?.role !== 'ob') return false
+    return true
+  })
+
+  if (profileLoading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
+    </div>
+  )
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
@@ -87,20 +106,26 @@ function NewPostForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {/* 채널 */}
+        {/* 채널 선택 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-2 block"
             style={{ color: 'var(--text-hint)' }}>채널</label>
-          <div className="flex gap-2">
-            {CHANNELS.map(ch => (
-              <button key={ch.value} type="button" onClick={() => setChannel(ch.value)}
-                className="text-xs font-black px-4 py-2 rounded-xl btn-press"
+          <div className="flex flex-col gap-2">
+            {availableChannels.map(ch => (
+              <button key={ch.value} type="button"
+                onClick={() => setChannel(ch.value)}
+                className="text-left px-4 py-3 rounded-xl btn-press"
                 style={{
-                  background: channel === ch.value ? 'var(--ski-blue)' : 'var(--bg-card)',
-                  border: `0.5px solid ${channel === ch.value ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
-                  color: channel === ch.value ? '#fff' : 'var(--text-tertiary)',
+                  background: channel === ch.value ? 'var(--ski-blue-50)' : '#fff',
+                  border: `1px solid ${channel === ch.value ? 'var(--dku-blue-primary)' : 'var(--border-primary)'}`,
                 }}>
-                {ch.label}
+                <p className="text-sm font-black"
+                  style={{ color: channel === ch.value ? 'var(--dku-blue-primary)' : 'var(--text-primary)' }}>
+                  {ch.label}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+                  {ch.desc}
+                </p>
               </button>
             ))}
           </div>
@@ -110,88 +135,97 @@ function NewPostForm() {
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>제목</label>
-          <input type="text" placeholder="제목을 입력해주세요"
+          <input type="text" placeholder="제목을 입력하세요"
             value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
+            style={inputStyle} required />
         </div>
 
         {/* 내용 */}
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>내용</label>
-          <textarea placeholder="내용을 입력해주세요"
-            value={content} onChange={e => setContent(e.target.value)} rows={8}
-            className="w-full rounded-xl px-4 py-3 text-sm resize-none"
-            style={inputStyle} required />
+          <textarea placeholder="내용을 입력하세요" rows={6}
+            value={content} onChange={e => setContent(e.target.value)}
+            style={{ ...inputStyle, resize: 'none', lineHeight: 1.6 }} required />
         </div>
 
-        {/* 이미지 */}
+        {/* 이미지 첨부 */}
         <div>
-          <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
-            style={{ color: 'var(--text-hint)' }}>이미지 (선택)</label>
-          {imageUrl ? (
-            <div className="relative">
-              <img src={imageUrl} alt="미리보기" className="w-full h-48 object-cover rounded-xl" />
-              <button type="button" onClick={() => setImageUrl('')}
-                className="absolute top-2 right-2 text-xs font-black px-2.5 py-1.5 rounded-lg btn-press"
-                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
-                삭제
-              </button>
+          <label className="text-xs font-black tracking-widest uppercase mb-2 block"
+            style={{ color: 'var(--text-hint)' }}>
+            이미지 첨부 (최대 5장)
+          </label>
+          {imageUrls.length > 0 && (
+            <div className="flex gap-2 flex-wrap mb-2">
+              {imageUrls.map((url, i) => (
+                <div key={i} className="relative">
+                  <img src={url} alt="" className="w-20 h-20 object-cover rounded-xl" />
+                  <button type="button" onClick={() => removeImage(i)}
+                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-black text-white"
+                    style={{ background: 'var(--accent-red)' }}>
+                    ✕
+                  </button>
+                </div>
+              ))}
             </div>
-          ) : (
-            <button type="button" onClick={() => imageInputRef.current?.click()}
-              disabled={imageUploading}
-              className="w-full h-28 rounded-xl flex flex-col items-center justify-center gap-2 btn-press"
-              style={{ border: '1px dashed var(--border-secondary)', background: 'var(--bg-card)' }}>
-              {imageUploading ? (
+          )}
+          {imageUrls.length < 5 && (
+            <button type="button" onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="w-full h-16 rounded-xl flex items-center justify-center gap-2 btn-press"
+              style={{ border: '1.5px dashed var(--border-secondary)', background: 'var(--surface-low)' }}>
+              {uploading ? (
                 <p className="text-sm" style={{ color: 'var(--text-hint)' }}>업로드 중...</p>
               ) : (
                 <>
-                  <span className="text-2xl">📷</span>
-                  <p className="text-sm" style={{ color: 'var(--text-hint)' }}>사진 추가</p>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="var(--text-hint)" strokeWidth="1.5"
+                    strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <path d="M21 15l-5-5L5 21" />
+                  </svg>
+                  <p className="text-sm font-bold" style={{ color: 'var(--text-tertiary)' }}>
+                    사진 추가
+                  </p>
                 </>
               )}
             </button>
           )}
-          <input ref={imageInputRef} type="file" accept="image/*"
+          <input ref={fileInputRef} type="file" accept="image/*" multiple
             onChange={handleImageUpload} className="hidden" />
         </div>
 
-        {/* 익명 */}
+        {/* 익명 토글 */}
         <div className="flex items-center justify-between rounded-xl px-4 py-3"
-          style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+          style={{ background: '#fff', border: '1px solid var(--border-primary)' }}>
           <div>
-            <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-              익명으로 작성
-            </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-              운영진에게는 작성자가 표시돼요
+            <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>익명으로 게시</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+              {isAnonymous ? '이름이 숨겨져요 (운영진은 볼 수 있어요)' : `${profile?.name}으로 게시돼요`}
             </p>
           </div>
           <button type="button" onClick={() => setIsAnonymous(!isAnonymous)}
-            className="relative w-12 h-6 rounded-full transition-all duration-200 flex-shrink-0"
-            style={{ background: isAnonymous ? 'var(--ski-blue)' : 'rgba(255,255,255,0.1)' }}>
+            className="relative w-12 h-6 rounded-full transition-all duration-200"
+            style={{ background: isAnonymous ? 'var(--dku-blue-primary)' : 'var(--border-secondary)' }}>
             <span className="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200"
               style={{ left: isAnonymous ? '28px' : '4px' }} />
           </button>
         </div>
 
-        {error && <p className="text-xs" style={{ color: 'var(--accent-red)' }}>{error}</p>}
+        {error && (
+          <div className="rounded-xl px-4 py-3"
+            style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.15)' }}>
+            <p className="text-xs font-bold" style={{ color: 'var(--accent-red)' }}>{error}</p>
+          </div>
+        )}
 
-        <button type="submit" disabled={submitting || !profile}
+        <button type="submit" disabled={submitting}
           className="w-full text-white rounded-xl py-3.5 text-sm font-black disabled:opacity-50 btn-press"
-          style={{ background: 'var(--ski-blue)' }}>
-          {submitting ? '등록 중...' : '게시하기'}
+          style={{ background: 'var(--dku-blue-primary)' }}>
+          {submitting ? '게시 중...' : '게시하기'}
         </button>
       </form>
     </main>
-  )
-}
-
-export default function NewPostPage() {
-  return (
-    <Suspense>
-      <NewPostForm />
-    </Suspense>
   )
 }

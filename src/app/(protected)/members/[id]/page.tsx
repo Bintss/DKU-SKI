@@ -13,36 +13,23 @@ type Member = {
   generation: number
   role: string
   join_type: string
-  join_year: number | null
-  student_id: string | null
-  student_id_status: string | null
-  bio: string | null
-  avatar_url: string | null
-  // 부원 공개
-  affiliation: string | null
   ski_level: string | null
   equipment: string[] | null
   camp_intent: string | null
-  // 운영진만
-  gender: string | null
-  birth_date: string | null
+  bio: string | null
+  avatar_url: string | null
+  affiliation: string | null
   phone: string | null
+  birth_date: string | null
+  gender: string | null
   emergency_contact_name: string | null
   emergency_contact_phone: string | null
+  student_id: string | null
 }
 
 const SKI_LEVEL_LABEL: Record<string, string> = {
-  beginner: '처음',
-  novice: '초급',
-  intermediate: '중급',
-  advanced: '상급',
-  certified: '자격증 보유',
-}
-
-const CAMP_INTENT_LABEL: Record<string, string> = {
-  yes: '참여',
-  no: '미참여',
-  undecided: '미정',
+  beginner: '처음', novice: '초급', intermediate: '중급',
+  advanced: '상급', certified: '자격증 보유',
 }
 
 const EQUIPMENT_LABEL: Record<string, string> = {
@@ -50,25 +37,22 @@ const EQUIPMENT_LABEL: Record<string, string> = {
   helmet: '헬멧', goggles: '고글', gloves: '장갑',
 }
 
+const CAMP_INTENT_LABEL: Record<string, string> = {
+  yes: '참여', no: '미참여', undecided: '미정',
+}
+
 export default function MemberDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const { profile, loading: profileLoading } = useProfile()
   const supabase = createClient()
-
   const [member, setMember] = useState<Member | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
     const { data } = await supabase
       .from('profiles')
-      .select(`
-        id, name, generation, role, join_type, join_year,
-        student_id, student_id_status, bio, avatar_url,
-        affiliation, ski_level, equipment, camp_intent,
-        gender, birth_date, phone,
-        emergency_contact_name, emergency_contact_phone
-      `)
+      .select('*')
       .eq('id', id)
       .single()
     setMember(data)
@@ -77,27 +61,11 @@ export default function MemberDetailPage() {
 
   useEffect(() => {
     if (!profile) return
-    if (profile.id === id) { router.replace('/profile'); return }
+    if (profile.id === id as string) { router.replace('/profile'); return }
     fetchData()
   }, [profile, id, router, fetchData])
 
   usePageVisibilityRefetch(fetchData, { enabled: !!profile && profile.id !== id, debounceMs: 5000 })
-
-  const roleLabel: Record<string, string> = {
-    member: '부원', ob: 'OB', admin: '운영진', pending: '승인 대기'
-  }
-  const roleColor: Record<string, string> = {
-    member: 'rgba(27,63,171,0.3)',
-    ob: 'rgba(155,89,182,0.3)',
-    admin: 'rgba(230,126,34,0.3)',
-    pending: 'rgba(255,255,255,0.06)',
-  }
-  const roleTextColor: Record<string, string> = {
-    member: 'var(--accent-blue)',
-    ob: 'var(--accent-purple)',
-    admin: 'var(--accent-orange)',
-    pending: 'var(--text-hint)',
-  }
 
   const isAdmin = profile?.role === 'admin'
 
@@ -113,21 +81,51 @@ export default function MemberDetailPage() {
     </div>
   )
 
+  const roleLabel: Record<string, string> = {
+    member: '부원', ob: 'OB', admin: '운영진', pending: '승인 대기'
+  }
+
+  const sectionCard = {
+    background: '#fff',
+    border: '1px solid var(--border-primary)',
+    borderRadius: '16px',
+    padding: '20px',
+    marginBottom: '12px',
+    boxShadow: 'var(--shadow-sm)',
+  }
+
+  const sectionTitle = {
+    fontSize: '11px',
+    fontWeight: '900',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase' as const,
+    color: 'var(--text-hint)',
+    marginBottom: '12px',
+  }
+
+  const row = (label: string, value: string | null | undefined) => value ? (
+    <div className="flex items-center justify-between py-2.5"
+      style={{ borderBottom: '1px solid var(--border-primary)' }}>
+      <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{label}</span>
+      <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{value}</span>
+    </div>
+  ) : null
+
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
-      <Link href="/members" className="text-xs font-semibold block mb-4"
-        style={{ color: 'var(--text-tertiary)' }}>
-        ← 동문 디렉토리
-      </Link>
+      <div className="flex items-center justify-between mb-4">
+        <Link href="/members" className="text-xs font-semibold"
+          style={{ color: 'var(--text-tertiary)' }}>← 동문 찾기</Link>
+      </div>
 
-      {/* 프로필 카드 */}
+      {/* 프로필 헤더 */}
       <div className="rounded-2xl p-6 mb-5 text-center relative overflow-hidden"
         style={{
-          background: 'linear-gradient(135deg, #1B3FAB 0%, #2E55C8 100%)',
-          boxShadow: '0 8px 32px rgba(27,63,171,0.3)',
+          background: 'linear-gradient(135deg, var(--dku-blue-primary) 0%, var(--dku-blue) 100%)',
+          boxShadow: 'var(--shadow-blue)',
         }}>
-        <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
-          style={{ background: 'white', transform: 'translate(30%,-30%)' }} />
+        <div className="absolute top-0 right-0 w-32 h-32 rounded-full"
+          style={{ background: 'rgba(255,255,255,0.06)', transform: 'translate(30%,-30%)' }} />
 
         {member.avatar_url ? (
           <img src={member.avatar_url} alt={member.name}
@@ -135,163 +133,95 @@ export default function MemberDetailPage() {
             style={{ border: '2px solid rgba(255,255,255,0.3)' }} />
         ) : (
           <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black mx-auto mb-3"
-            style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
+            style={{ background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
             {member.name[0]}
           </div>
         )}
 
         <p className="text-xl font-black mb-1" style={{ color: '#fff' }}>{member.name}</p>
-        <p className="text-sm mb-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          {member.generation}기
-          {member.join_year && ` · ${member.join_year}년 입부`}
-          {' · '}{member.join_type === 'ob' ? '졸업생' : '재학생'}
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          {member.generation}기 · {member.join_type === 'ob' ? '졸업생' : '재학생'}
         </p>
-        <span className="inline-block text-xs font-black px-3 py-1 rounded-full"
-          style={{
-            background: roleColor[member.role] ?? 'rgba(255,255,255,0.15)',
-            color: roleTextColor[member.role] ?? '#fff',
-          }}>
-          {roleLabel[member.role]}
+        <span className="inline-block mt-2 text-xs font-black px-3 py-1 rounded-full"
+          style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)' }}>
+          {roleLabel[member.role] ?? member.role}
         </span>
       </div>
 
-      {/* 자기소개 */}
-      {member.bio && (
-        <div className="rounded-2xl p-5 mb-4"
-          style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-          <h2 className="text-xs font-black tracking-widest uppercase mb-2"
-            style={{ color: 'var(--text-hint)' }}>자기소개</h2>
+      {/* 공개 정보 */}
+      <div style={sectionCard}>
+        <p style={sectionTitle}>스키 활동</p>
+        {member.ski_level && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>실력</span>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+              style={{ background: 'var(--ski-blue-50)', color: 'var(--dku-blue-primary)' }}>
+              {SKI_LEVEL_LABEL[member.ski_level] ?? member.ski_level}
+            </span>
+          </div>
+        )}
+        {member.equipment && member.equipment.length > 0 && (
+          <div className="flex items-start gap-2 mb-2">
+            <span className="text-sm mt-1 flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>장비</span>
+            <div className="flex flex-wrap gap-1.5">
+              {member.equipment.map(e => (
+                <span key={e} className="text-xs font-bold px-2 py-0.5 rounded-full"
+                  style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-secondary)' }}>
+                  {EQUIPMENT_LABEL[e] ?? e}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {member.camp_intent && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>합숙 의향</span>
+            <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+              {CAMP_INTENT_LABEL[member.camp_intent] ?? member.camp_intent}
+            </span>
+          </div>
+        )}
+        {!member.ski_level && !member.equipment?.length && !member.camp_intent && (
+          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>등록된 정보가 없어요</p>
+        )}
+      </div>
+
+      {member.affiliation && (
+        <div style={sectionCard}>
+          <p style={sectionTitle}>소속</p>
           <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            {member.affiliation}
+          </p>
+        </div>
+      )}
+
+      {member.bio && (
+        <div style={sectionCard}>
+          <p style={sectionTitle}>자기소개</p>
+          <p className="text-sm leading-relaxed whitespace-pre-wrap"
+            style={{ color: 'var(--text-secondary)' }}>
             {member.bio}
           </p>
         </div>
       )}
 
-      {/* 소속 및 스키 활동 — 부원 전체 공개 */}
-      <div className="rounded-2xl p-5 mb-4"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
-        <h2 className="text-xs font-black tracking-widest uppercase mb-3"
-          style={{ color: 'var(--text-hint)' }}>활동 정보</h2>
-
-        <div className="flex flex-col gap-2.5">
-          {member.affiliation && (
-            <div className="flex items-start gap-3">
-              <span className="text-xs font-black w-16 flex-shrink-0 mt-0.5"
-                style={{ color: 'var(--text-tertiary)' }}>소속</span>
-              <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
-                {member.affiliation}
-              </span>
-            </div>
-          )}
-
-          {member.ski_level && (
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-black w-16 flex-shrink-0"
-                style={{ color: 'var(--text-tertiary)' }}>스키 실력</span>
-              <span className="text-xs font-black px-2.5 py-1 rounded-full"
-                style={{ background: 'rgba(27,63,171,0.2)', color: 'var(--accent-blue)' }}>
-                🎿 {SKI_LEVEL_LABEL[member.ski_level] ?? member.ski_level}
-              </span>
-            </div>
-          )}
-
-          {member.equipment && member.equipment.length > 0 && (
-            <div className="flex items-start gap-3">
-              <span className="text-xs font-black w-16 flex-shrink-0 mt-0.5"
-                style={{ color: 'var(--text-tertiary)' }}>보유 장비</span>
-              <div className="flex flex-wrap gap-1.5">
-                {member.equipment.map(e => (
-                  <span key={e} className="text-xs font-bold px-2 py-0.5 rounded-full"
-                    style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}>
-                    {EQUIPMENT_LABEL[e] ?? e}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {member.camp_intent && (
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-black w-16 flex-shrink-0"
-                style={{ color: 'var(--text-tertiary)' }}>합숙 의향</span>
-              <span className="text-xs font-bold px-2.5 py-1 rounded-full"
-                style={{
-                  background: member.camp_intent === 'yes'
-                    ? 'rgba(46,204,113,0.15)'
-                    : member.camp_intent === 'no'
-                    ? 'rgba(255,255,255,0.06)'
-                    : 'rgba(255,214,0,0.15)',
-                  color: member.camp_intent === 'yes'
-                    ? 'var(--accent-green)'
-                    : member.camp_intent === 'no'
-                    ? 'var(--text-hint)'
-                    : '#FFD700',
-                }}>
-                🏔️ {CAMP_INTENT_LABEL[member.camp_intent]}
-              </span>
-            </div>
-          )}
-
-          {/* 공개 정보가 하나도 없을 때 */}
-          {!member.affiliation && !member.ski_level &&
-            (!member.equipment || member.equipment.length === 0) && !member.camp_intent && (
-            <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
-              아직 입력된 정보가 없어요
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* 운영진 전용 — 개인 정보 */}
+      {/* 운영진 전용 정보 */}
       {isAdmin && (
-        <div className="rounded-2xl p-5 mb-4"
-          style={{
-            background: 'rgba(230,126,34,0.06)',
-            border: '0.5px solid rgba(230,126,34,0.2)',
-          }}>
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-xs font-black tracking-widest uppercase"
-              style={{ color: 'var(--accent-orange)' }}>운영진 전용</h2>
-            <span className="text-xs font-black px-2 py-0.5 rounded-full"
-              style={{ background: 'rgba(230,126,34,0.2)', color: 'var(--accent-orange)' }}>
-              비공개
-            </span>
+        <div style={{ ...sectionCard, background: 'rgba(0,60,117,0.04)', border: '1px solid var(--dku-blue-light)' }}>
+          <p style={{ ...sectionTitle, color: 'var(--dku-blue)' }}>운영진 전용 정보</p>
+          <div style={{ borderBottom: 'none' }}>
+            {row('성별', member.gender === 'male' ? '남성' : member.gender === 'female' ? '여성' : null)}
+            {row('생년월일', member.birth_date)}
+            {row('연락처', member.phone)}
+            {row('학번', member.student_id)}
           </div>
-
-          <div className="flex flex-col gap-2.5">
-            {[
-              {
-                label: '성별',
-                value: member.gender === 'male' ? '남성'
-                  : member.gender === 'female' ? '여성' : null,
-              },
-              { label: '생년월일', value: member.birth_date },
-              { label: '연락처', value: member.phone },
-              {
-                label: '비상연락처',
-                value: member.emergency_contact_name && member.emergency_contact_phone
-                  ? `${member.emergency_contact_name} · ${member.emergency_contact_phone}`
-                  : null,
-              },
-              {
-                label: '학번',
-                value: member.student_id_status === 'completed' ? member.student_id
-                  : member.student_id_status === 'not_issued' ? '미발급'
-                  : member.student_id_status === 'not_applicable' ? '해당없음'
-                  : null,
-              },
-            ].filter(item => item.value).map(item => (
-              <div key={item.label} className="flex items-start gap-3">
-                <span className="text-xs font-black w-20 flex-shrink-0 mt-0.5"
-                  style={{ color: 'var(--text-tertiary)' }}>
-                  {item.label}
-                </span>
-                <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
-                  {item.value}
-                </span>
-              </div>
-            ))}
-          </div>
+          {(member.emergency_contact_name || member.emergency_contact_phone) && (
+            <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--dku-blue-light)' }}>
+              <p className="text-xs font-black mb-2" style={{ color: 'var(--dku-blue)' }}>비상연락처</p>
+              {row('이름', member.emergency_contact_name)}
+              {row('번호', member.emergency_contact_phone)}
+            </div>
+          )}
         </div>
       )}
     </main>
