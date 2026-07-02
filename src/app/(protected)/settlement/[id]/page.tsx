@@ -46,9 +46,9 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  unpaid: '#F09595',
-  pending: '#FFD700',
-  paid: '#2ECC71',
+  unpaid: 'var(--accent-red)',
+  pending: 'var(--accent-yellow)',
+  paid: 'var(--accent-green)',
 }
 
 const REJECT_REASONS = [
@@ -74,13 +74,10 @@ export default function SettlementDetailPage() {
   const fetchData = useCallback(async () => {
     if (!profile) return
     const [{ data: settlementData }, { data: itemData }, { data: settingsData }] = await Promise.all([
-      supabase.from('settlements')
-        .select('*, profiles(name)')
-        .eq('id', id).single(),
+      supabase.from('settlements').select('*, profiles(name)').eq('id', id).single(),
       supabase.from('settlement_items')
         .select('*, profiles(name, generation)')
-        .eq('settlement_id', id)
-        .order('status'),
+        .eq('settlement_id', id).order('status'),
       supabase.from('club_settings').select('*').eq('id', 1).single(),
     ])
     setSettlement(settlementData)
@@ -92,7 +89,6 @@ export default function SettlementDetailPage() {
   useEffect(() => {
     if (!profile) return
     fetchData()
-
     const channel = supabase
       .channel(`settlement-detail-${id}`)
       .on('postgres_changes', {
@@ -100,7 +96,6 @@ export default function SettlementDetailPage() {
         filter: `settlement_id=eq.${id}`,
       }, () => fetchData())
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
   }, [profile, id, fetchData, supabase])
 
@@ -116,51 +111,35 @@ export default function SettlementDetailPage() {
   }
 
   const handleReject = async (item: SettlementItem) => {
-  if (!rejectReason) return
-
-  // API를 통해 반려 처리 (RLS 우회용 service role 사용)
-  const res = await fetch('/api/settlement/status', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      itemId: item.id,
-      action: 'reject',
-      rejectReason,
-    }),
-  })
-
-  if (!res.ok) {
-    const result = await res.json()
-    alert(result.error ?? '반려 처리에 실패했어요')
-    return
+    if (!rejectReason) return
+    const res = await fetch('/api/settlement/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: item.id, action: 'reject', rejectReason }),
+    })
+    if (!res.ok) {
+      const result = await res.json()
+      alert(result.error ?? '반려 처리에 실패했어요')
+      return
+    }
+    if (rejectReason === 'wrong_transfer_name') {
+      await navigator.clipboard.writeText('송금명오류').catch(() => {})
+    }
+    const { data: memberProfile } = await supabase
+      .from('profiles')
+      .select('name, refund_bank_name, refund_account_number, refund_account_holder')
+      .eq('id', item.user_id).single()
+    if (memberProfile?.refund_account_number) {
+      const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
+      window.location.href = tossUrl
+      setTimeout(() => { window.open('https://toss.me/transfer', '_blank') }, 500)
+    } else {
+      alert(`${memberProfile?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요.\n직접 환불 후 처리해주세요.`)
+    }
+    setRejectingId(null)
+    setRejectReason('wrong_transfer_name')
+    fetchData()
   }
-
-  // 송금명 오류인 경우 "송금명오류" 클립보드 복사
-  if (rejectReason === 'wrong_transfer_name') {
-    await navigator.clipboard.writeText('송금명오류').catch(() => {})
-  }
-
-  // 환불 계좌 조회 후 토스 딥링크
-  const { data: memberProfile } = await supabase
-    .from('profiles')
-    .select('name, refund_bank_name, refund_account_number, refund_account_holder')
-    .eq('id', item.user_id)
-    .single()
-
-  if (memberProfile?.refund_account_number) {
-    const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
-    window.location.href = tossUrl
-    setTimeout(() => {
-      window.open('https://toss.me/transfer', '_blank')
-    }, 500)
-  } else {
-    alert(`${memberProfile?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요.\n직접 환불 후 처리해주세요.`)
-  }
-
-  setRejectingId(null)
-  setRejectReason('wrong_transfer_name')
-  fetchData()
-}
 
   const handleDelete = async () => {
     if (!confirm('이 정산을 삭제할까요? 되돌릴 수 없어요.')) return
@@ -178,9 +157,7 @@ export default function SettlementDetailPage() {
   const openToss = (account: ClubAccount, amount: number) => {
     const tossUrl = `supertoss://send?amount=${amount}&bank=${encodeURIComponent(account.bank_name ?? '')}&accountNo=${account.account_number}&origin=qr`
     window.location.href = tossUrl
-    setTimeout(() => {
-      window.open('https://toss.me/transfer', '_blank')
-    }, 500)
+    setTimeout(() => { window.open('https://toss.me/transfer', '_blank') }, 500)
   }
 
   const copyAccount = async (account: ClubAccount) => {
@@ -205,7 +182,6 @@ export default function SettlementDetailPage() {
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
   )
-
   if (!settlement) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>정산을 찾을 수 없어요</p>
@@ -220,7 +196,7 @@ export default function SettlementDetailPage() {
         {(isAdmin || isCreator) && (
           <button onClick={handleDelete}
             className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
-            style={{ background: 'rgba(255,107,107,0.1)', color: '#FF6B6B' }}>
+            style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)', color: 'var(--accent-red)' }}>
             삭제
           </button>
         )}
@@ -228,7 +204,7 @@ export default function SettlementDetailPage() {
 
       {/* 정산 헤더 */}
       <div className="rounded-2xl p-5 mb-4"
-        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+        style={{ background: '#fff', border: '1px solid var(--border-primary)', boxShadow: 'var(--shadow-sm)' }}>
         <h1 className="text-xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
           {settlement.title}
         </h1>
@@ -243,19 +219,18 @@ export default function SettlementDetailPage() {
           </span>
           {settlement.due_date && (
             <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-              style={{ background: 'rgba(255,214,0,0.15)', color: '#FFD700' }}>
+              style={{ background: 'rgba(202,138,10,0.1)', color: 'var(--accent-yellow)' }}>
               {formatDate(settlement.due_date)} 마감
             </span>
           )}
         </div>
 
-        {/* 진행 요약 */}
         <div className="grid grid-cols-3 gap-3 mt-4 pt-4"
-          style={{ borderTop: '0.5px solid var(--border-primary)' }}>
+          style={{ borderTop: '1px solid var(--border-primary)' }}>
           {[
-            { label: '납부완료', count: paidCount, color: '#2ECC71' },
-            { label: '확인대기', count: pendingCount, color: '#FFD700' },
-            { label: '미납', count: unpaidCount, color: '#F09595' },
+            { label: '납부완료', count: paidCount, color: 'var(--accent-green)' },
+            { label: '확인대기', count: pendingCount, color: 'var(--accent-yellow)' },
+            { label: '미납', count: unpaidCount, color: 'var(--accent-red)' },
           ].map(item => (
             <div key={item.label} className="text-center">
               <p className="text-xl font-black" style={{ color: item.color }}>{item.count}</p>
@@ -269,13 +244,13 @@ export default function SettlementDetailPage() {
       {myItem && (
         <div className="rounded-2xl p-5 mb-4"
           style={{
-            background: myItem.status === 'paid' ? 'rgba(46,204,113,0.06)'
-              : myItem.status === 'pending' ? 'rgba(255,214,0,0.06)'
-              : 'rgba(27,63,171,0.08)',
-            border: `0.5px solid ${
-              myItem.status === 'paid' ? 'rgba(46,204,113,0.2)'
-              : myItem.status === 'pending' ? 'rgba(255,214,0,0.2)'
-              : 'rgba(27,63,171,0.25)'}`,
+            background: myItem.status === 'paid' ? 'rgba(22,163,74,0.06)'
+              : myItem.status === 'pending' ? 'rgba(202,138,10,0.06)'
+              : 'rgba(0,60,117,0.06)',
+            border: `1px solid ${
+              myItem.status === 'paid' ? 'rgba(22,163,74,0.2)'
+              : myItem.status === 'pending' ? 'rgba(202,138,10,0.2)'
+              : 'var(--dku-blue-light)'}`,
           }}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-black tracking-widest uppercase"
@@ -297,8 +272,8 @@ export default function SettlementDetailPage() {
           {/* 반려 사유 */}
           {myItem.status === 'unpaid' && myItem.reject_reason && (
             <div className="rounded-xl p-3 mb-3"
-              style={{ background: 'rgba(255,107,107,0.08)', border: '0.5px solid rgba(255,107,107,0.2)' }}>
-              <p className="text-xs font-bold" style={{ color: '#FF6B6B' }}>
+              style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.15)' }}>
+              <p className="text-xs font-bold" style={{ color: 'var(--accent-red)' }}>
                 ⚠️ 반려됨 — {REJECT_REASONS.find(r => r.value === myItem.reject_reason)?.label ?? myItem.reject_reason}
               </p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
@@ -312,7 +287,7 @@ export default function SettlementDetailPage() {
           {/* 송금명 복사 */}
           {myItem.transfer_name && myItem.status === 'unpaid' && (
             <div className="rounded-xl p-3 mb-3"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid var(--border-primary)' }}>
+              style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)' }}>
               <p className="text-xs mb-1.5" style={{ color: 'var(--text-hint)' }}>
                 송금 시 이 이름으로 보내주세요
               </p>
@@ -324,8 +299,8 @@ export default function SettlementDetailPage() {
                   onClick={() => handleCopyTransferName(myItem.transfer_name!)}
                   className="text-xs font-black px-3 py-1.5 rounded-lg btn-press flex-shrink-0"
                   style={{
-                    background: copied ? 'rgba(46,204,113,0.2)' : 'rgba(27,63,171,0.2)',
-                    color: copied ? 'var(--accent-green)' : 'var(--accent-blue)',
+                    background: copied ? 'rgba(22,163,74,0.1)' : 'var(--ski-blue-50)',
+                    color: copied ? 'var(--accent-green)' : 'var(--dku-blue-primary)',
                   }}>
                   {copied ? '복사됨 ✓' : '복사'}
                 </button>
@@ -347,7 +322,7 @@ export default function SettlementDetailPage() {
               </button>
               <button onClick={() => copyAccount(clubAccount)}
                 className="w-full rounded-xl py-2.5 text-xs font-bold btn-press"
-                style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-tertiary)' }}>
+                style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-tertiary)' }}>
                 계좌번호 복사 ({clubAccount.bank_name} {clubAccount.account_number})
               </button>
             </div>
@@ -356,14 +331,14 @@ export default function SettlementDetailPage() {
           {myItem.status === 'unpaid' ? (
             <button onClick={() => callStatusApi(myItem.id, 'request_confirm')}
               className="w-full rounded-xl py-3 text-sm font-black btn-press"
-              style={{ background: 'var(--ski-blue)', color: '#fff' }}>
+              style={{ background: 'var(--dku-blue-primary)', color: '#fff' }}>
               송금했어요
             </button>
           ) : myItem.status === 'pending' ? (
             <div className="flex flex-col gap-2">
               <div className="rounded-xl p-3 text-center"
-                style={{ background: 'rgba(255,214,0,0.08)', border: '0.5px solid rgba(255,214,0,0.2)' }}>
-                <p className="text-xs font-black mb-0.5" style={{ color: '#FFD700' }}>
+                style={{ background: 'rgba(202,138,10,0.08)', border: '1px solid rgba(202,138,10,0.2)' }}>
+                <p className="text-xs font-black mb-0.5" style={{ color: 'var(--accent-yellow)' }}>
                   확인 대기 중
                 </p>
                 <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
@@ -372,18 +347,18 @@ export default function SettlementDetailPage() {
               </div>
               <button onClick={() => callStatusApi(myItem.id, 'cancel_pending')}
                 className="w-full rounded-xl py-2.5 text-xs font-bold btn-press"
-                style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-hint)' }}>
+                style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-hint)' }}>
                 취소 (잘못 눌렀어요)
               </button>
             </div>
           ) : (
             <div className="rounded-xl p-3 text-center"
-              style={{ background: 'rgba(46,204,113,0.08)', border: '0.5px solid rgba(46,204,113,0.2)' }}>
+              style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.2)' }}>
               <p className="text-sm font-black mb-0.5" style={{ color: 'var(--accent-green)' }}>
                 납부 완료 ✓
               </p>
               {myItem.paid_at && (
-                <p className="text-xs" style={{ color: 'rgba(46,204,113,0.6)' }}>
+                <p className="text-xs" style={{ color: 'rgba(22,163,74,0.6)' }}>
                   {formatDate(myItem.paid_at)} 확인 완료
                 </p>
               )}
@@ -395,7 +370,7 @@ export default function SettlementDetailPage() {
       {/* 운영진 전체 현황 */}
       {(isAdmin || isCreator) && (
         <div className="rounded-2xl p-5"
-          style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-primary)' }}>
+          style={{ background: '#fff', border: '1px solid var(--border-primary)', boxShadow: 'var(--shadow-sm)' }}>
           <h2 className="text-xs font-black tracking-widest uppercase mb-3"
             style={{ color: 'var(--text-hint)' }}>전체 현황</h2>
 
@@ -403,14 +378,13 @@ export default function SettlementDetailPage() {
             {items.map(item => {
               const isRejecting = rejectingId === item.id
               return (
-                <div key={item.id}
-                  className="rounded-xl p-3"
+                <div key={item.id} className="rounded-xl p-3"
                   style={{
-                    background: 'var(--bg-secondary)',
-                    border: `0.5px solid ${
-                      item.status === 'paid' ? 'rgba(46,204,113,0.2)'
-                      : item.status === 'pending' ? 'rgba(255,214,0,0.2)'
-                      : item.reject_reason ? 'rgba(255,107,107,0.2)'
+                    background: 'var(--surface-low)',
+                    border: `1px solid ${
+                      item.status === 'paid' ? 'rgba(22,163,74,0.2)'
+                      : item.status === 'pending' ? 'rgba(202,138,10,0.2)'
+                      : item.reject_reason ? 'rgba(220,38,38,0.2)'
                       : 'var(--border-primary)'}`,
                   }}>
                   <div className="flex items-center justify-between gap-2">
@@ -426,17 +400,17 @@ export default function SettlementDetailPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold"
                           style={{
-                            color: item.status === 'paid' ? '#2ECC71'
-                              : item.status === 'pending' ? '#FFD700'
-                              : item.reject_reason ? '#FF6B6B'
-                              : '#F09595'
+                            color: item.status === 'paid' ? 'var(--accent-green)'
+                              : item.status === 'pending' ? 'var(--accent-yellow)'
+                              : item.reject_reason ? 'var(--accent-red)'
+                              : 'var(--accent-red)'
                           }}>
                           {STATUS_LABEL[item.status]}
                           {item.status === 'unpaid' && item.reject_reason && ' (반려됨)'}
                         </span>
                         {item.transfer_name && (
                           <span className="text-xs font-bold px-1.5 py-0.5 rounded"
-                            style={{ background: 'rgba(27,63,171,0.15)', color: 'var(--accent-blue)' }}>
+                            style={{ background: 'var(--ski-blue-50)', color: 'var(--dku-blue-primary)' }}>
                             {item.transfer_name}
                           </span>
                         )}
@@ -455,7 +429,7 @@ export default function SettlementDetailPage() {
                         <div className="flex gap-1">
                           <button onClick={() => callStatusApi(item.id, 'mark_paid')}
                             className="text-xs font-black px-2 py-1 rounded-lg btn-press"
-                            style={{ background: 'rgba(46,204,113,0.2)', color: 'var(--accent-green)' }}>
+                            style={{ background: 'rgba(22,163,74,0.1)', color: 'var(--accent-green)' }}>
                             확인
                           </button>
                           <button onClick={() => {
@@ -463,7 +437,7 @@ export default function SettlementDetailPage() {
                             setRejectReason('wrong_transfer_name')
                           }}
                             className="text-xs font-black px-2 py-1 rounded-lg btn-press"
-                            style={{ background: 'rgba(255,107,107,0.15)', color: '#FF6B6B' }}>
+                            style={{ background: 'rgba(220,38,38,0.08)', color: 'var(--accent-red)' }}>
                             반려
                           </button>
                         </div>
@@ -473,7 +447,7 @@ export default function SettlementDetailPage() {
                           if (confirm('납부 확인을 취소할까요?')) callStatusApi(item.id, 'revert_unpaid')
                         }}
                           className="text-xs font-bold px-2 py-1 rounded-lg btn-press"
-                          style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-hint)' }}>
+                          style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-hint)' }}>
                           되돌리기
                         </button>
                       )}
@@ -483,7 +457,7 @@ export default function SettlementDetailPage() {
                   {/* 반려 처리 패널 */}
                   {isRejecting && (
                     <div className="mt-3 pt-3 flex flex-col gap-2"
-                      style={{ borderTop: '0.5px solid var(--border-primary)' }}>
+                      style={{ borderTop: '1px solid var(--border-primary)' }}>
                       <p className="text-xs font-black" style={{ color: 'var(--text-hint)' }}>
                         반려 사유
                       </p>
@@ -494,22 +468,21 @@ export default function SettlementDetailPage() {
                             className="rounded-lg px-2.5 py-1.5 text-xs font-bold btn-press"
                             style={{
                               background: rejectReason === r.value
-                                ? 'rgba(255,107,107,0.3)' : 'var(--bg-secondary)',
-                              border: `0.5px solid ${rejectReason === r.value
-                                ? 'rgba(255,107,107,0.5)' : 'var(--border-primary)'}`,
-                              color: rejectReason === r.value ? '#FF6B6B' : 'var(--text-tertiary)',
+                                ? 'rgba(220,38,38,0.1)' : '#fff',
+                              border: `1px solid ${rejectReason === r.value
+                                ? 'rgba(220,38,38,0.3)' : 'var(--border-primary)'}`,
+                              color: rejectReason === r.value ? 'var(--accent-red)' : 'var(--text-tertiary)',
                             }}>
                             {r.label}
                           </button>
                         ))}
                       </div>
 
-                      {/* 환불 계좌 미리보기 */}
                       <RefundAccountPreview userId={item.user_id} supabase={supabase} />
 
                       <button onClick={() => handleReject(item)}
                         className="w-full rounded-xl py-2.5 text-xs font-black btn-press"
-                        style={{ background: 'rgba(255,107,107,0.2)', color: '#FF6B6B' }}>
+                        style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)', color: 'var(--accent-red)' }}>
                         {rejectReason === 'wrong_transfer_name'
                           ? '반려 처리 + "송금명오류" 복사 + 환불 송금'
                           : '반려 처리 + 환불 송금'}
@@ -553,7 +526,7 @@ function RefundAccountPreview({
 
   return account.refund_account_number ? (
     <div className="rounded-xl p-3"
-      style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid var(--border-primary)' }}>
+      style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)' }}>
       <p className="text-xs font-black mb-1.5" style={{ color: 'var(--text-hint)' }}>
         환불 계좌
       </p>
@@ -572,12 +545,11 @@ function RefundAccountPreview({
             alert('계좌번호가 복사됐어요')
           }}
           className="text-xs font-black px-2.5 py-1.5 rounded-lg btn-press flex-shrink-0"
-          style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)' }}>
+          style={{ background: '#fff', border: '1px solid var(--border-primary)', color: 'var(--text-secondary)' }}>
           복사
         </button>
       </div>
-      <div className="mt-2 pt-2"
-        style={{ borderTop: '0.5px solid var(--border-primary)' }}>
+      <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--border-primary)' }}>
         <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
           환불 송금명으로
           <span className="font-black mx-1" style={{ color: 'var(--text-primary)' }}>
@@ -589,8 +561,8 @@ function RefundAccountPreview({
     </div>
   ) : (
     <div className="rounded-xl p-3"
-      style={{ background: 'rgba(255,107,107,0.08)', border: '0.5px solid rgba(255,107,107,0.2)' }}>
-      <p className="text-xs font-bold" style={{ color: '#FF6B6B' }}>
+      style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.15)' }}>
+      <p className="text-xs font-bold" style={{ color: 'var(--accent-red)' }}>
         ⚠️ {account.name}님의 환급 계좌가 등록되어 있지 않아요
       </p>
       <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>

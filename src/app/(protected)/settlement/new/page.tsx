@@ -35,22 +35,23 @@ export default function NewSettlementPage() {
   const [error, setError] = useState('')
 
   const inputStyle = {
-    background: 'var(--bg-secondary)',
-    border: '0.5px solid var(--border-primary)',
+    background: '#fff',
+    border: '1px solid var(--border-primary)',
     color: 'var(--text-primary)',
+    borderRadius: '12px',
+    padding: '12px 16px',
+    fontSize: '14px',
+    width: '100%',
+    outline: 'none',
   }
 
   useEffect(() => {
     if (!profile) return
     if (profile.role !== 'admin') { router.push('/settlement'); return }
-
     const fetchData = async () => {
       const [{ data: memberData }, { data: settingsData }] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, name, generation, role')
-          .neq('role', 'pending')
-          .neq('role', 'withdrawn')
+        supabase.from('profiles').select('id, name, generation, role')
+          .neq('role', 'pending').neq('role', 'withdrawn')
           .order('generation', { ascending: false }),
         supabase.from('club_settings').select('*').eq('id', 1).single(),
       ])
@@ -68,19 +69,15 @@ export default function NewSettlementPage() {
   }
 
   const isAllSelected = members.length > 0 && selectedIds.length === members.length
-
   const toggleAll = () => {
     setSelectedIds(isAllSelected ? [] : members.map(m => m.id))
   }
 
   const total = parseInt(totalAmount) || 0
   const amountPerPerson = selectedIds.length > 0 && total
-    ? Math.floor(total / selectedIds.length)
-    : 0
+    ? Math.floor(total / selectedIds.length) : 0
   const remainder = selectedIds.length > 0 && total
-    ? total % selectedIds.length
-    : 0
-
+    ? total % selectedIds.length : 0
   const customTotal = Object.values(customAmounts)
     .filter(v => v !== '')
     .reduce((sum, v) => sum + (parseInt(v) || 0), 0)
@@ -90,12 +87,10 @@ export default function NewSettlementPage() {
     if (submitting) return
     if (selectedIds.length === 0) { setError('정산 대상을 선택해주세요'); return }
     if (!total) { setError('총 금액을 입력해주세요'); return }
-
     if (!splitEqual && customTotal !== total) {
       setError(`개별 금액 합계(${customTotal.toLocaleString()}원)가 총액(${total.toLocaleString()}원)과 달라요`)
       return
     }
-
     setSubmitting(true)
     setError('')
 
@@ -114,23 +109,12 @@ export default function NewSettlementPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title,
-        description: description || null,
-        totalAmount: total,
-        dueDate: dueDate || null,
-        splitEqual,
-        targets,
+        title, description: description || null,
+        totalAmount: total, dueDate: dueDate || null, splitEqual, targets,
       }),
     })
-
     const result = await res.json()
-
-    if (!res.ok) {
-      setError(result.error ?? '정산 생성에 실패했어요')
-      setSubmitting(false)
-      return
-    }
-
+    if (!res.ok) { setError(result.error ?? '정산 생성에 실패했어요'); setSubmitting(false); return }
     router.push('/settlement')
   }
 
@@ -151,9 +135,9 @@ export default function NewSettlementPage() {
       {/* 받는 계좌 안내 */}
       {clubAccount?.account_number ? (
         <div className="rounded-2xl p-4 mb-5"
-          style={{ background: 'rgba(27,63,171,0.1)', border: '0.5px solid rgba(27,63,171,0.25)' }}>
+          style={{ background: 'var(--ski-blue-50)', border: '1px solid var(--dku-blue-light)' }}>
           <p className="text-xs font-black tracking-widest uppercase mb-1"
-            style={{ color: 'var(--accent-blue)' }}>입금 계좌 (스키부 공식)</p>
+            style={{ color: 'var(--dku-blue)' }}>입금 계좌 (스키부 공식)</p>
           <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
             {clubAccount.bank_name} {clubAccount.account_number}
           </p>
@@ -163,12 +147,12 @@ export default function NewSettlementPage() {
         </div>
       ) : (
         <div className="rounded-2xl p-4 mb-5"
-          style={{ background: 'rgba(240,149,149,0.1)', border: '0.5px solid rgba(240,149,149,0.3)' }}>
-          <p className="text-sm font-bold" style={{ color: '#F09595' }}>
+          style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.15)' }}>
+          <p className="text-sm font-bold" style={{ color: 'var(--accent-red)' }}>
             스키부 계좌가 등록되지 않았어요
           </p>
           <a href="/admin/settings" className="text-xs font-black underline"
-            style={{ color: '#F09595' }}>
+            style={{ color: 'var(--accent-red)' }}>
             계좌 설정하러 가기
           </a>
         </div>
@@ -180,7 +164,7 @@ export default function NewSettlementPage() {
             style={{ color: 'var(--text-hint)' }}>정산명</label>
           <input type="text" placeholder="예: 1월 3주차 식비"
             value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
+            style={inputStyle} required />
         </div>
 
         <div>
@@ -188,7 +172,7 @@ export default function NewSettlementPage() {
             style={{ color: 'var(--text-hint)' }}>설명 (선택)</label>
           <input type="text" placeholder="간단한 설명"
             value={description} onChange={e => setDescription(e.target.value)}
-            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
+            style={inputStyle} />
         </div>
 
         <div>
@@ -196,14 +180,14 @@ export default function NewSettlementPage() {
             style={{ color: 'var(--text-hint)' }}>총 금액 (원)</label>
           <input type="number" placeholder="0"
             value={totalAmount} onChange={e => setTotalAmount(e.target.value)}
-            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} required />
+            style={inputStyle} required />
         </div>
 
         <div>
           <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
             style={{ color: 'var(--text-hint)' }}>마감일 (선택)</label>
           <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-            className="w-full rounded-xl px-4 py-3 text-sm" style={inputStyle} />
+            style={inputStyle} />
         </div>
 
         <div>
@@ -218,8 +202,8 @@ export default function NewSettlementPage() {
                 onClick={() => setSplitEqual(opt.value)}
                 className="flex-1 py-2.5 rounded-xl text-xs font-black btn-press"
                 style={{
-                  background: splitEqual === opt.value ? 'var(--ski-blue)' : 'var(--bg-card)',
-                  border: `0.5px solid ${splitEqual === opt.value ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
+                  background: splitEqual === opt.value ? 'var(--dku-blue-primary)' : '#fff',
+                  border: `1px solid ${splitEqual === opt.value ? 'var(--dku-blue-primary)' : 'var(--border-primary)'}`,
                   color: splitEqual === opt.value ? '#fff' : 'var(--text-tertiary)',
                 }}>
                 {opt.label}
@@ -239,19 +223,19 @@ export default function NewSettlementPage() {
             </label>
             <button type="button" onClick={toggleAll}
               className="text-xs font-black btn-press"
-              style={{ color: 'var(--accent-blue)' }}>
+              style={{ color: 'var(--dku-blue)' }}>
               {isAllSelected ? '전체 해제' : '전체 선택'}
             </button>
           </div>
 
           {splitEqual && total > 0 && selectedIds.length > 0 && (
             <div className="rounded-xl px-4 py-3 mb-3"
-              style={{ background: 'rgba(27,63,171,0.15)', border: '0.5px solid rgba(27,63,171,0.3)' }}>
+              style={{ background: 'var(--ski-blue-50)', border: '1px solid var(--dku-blue-light)' }}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-black" style={{ color: 'var(--text-hint)' }}>
                   1인당 금액
                 </span>
-                <span className="text-base font-black" style={{ color: 'var(--accent-blue)' }}>
+                <span className="text-base font-black" style={{ color: 'var(--dku-blue-primary)' }}>
                   {amountPerPerson.toLocaleString()}원
                 </span>
               </div>
@@ -267,9 +251,9 @@ export default function NewSettlementPage() {
             <div className="rounded-xl px-4 py-3 mb-3 flex items-center justify-between"
               style={{
                 background: customTotal === total && total > 0
-                  ? 'rgba(46,204,113,0.1)' : 'rgba(255,255,255,0.04)',
-                border: `0.5px solid ${customTotal === total && total > 0
-                  ? 'rgba(46,204,113,0.3)' : 'var(--border-primary)'}`,
+                  ? 'rgba(22,163,74,0.06)' : 'var(--surface-low)',
+                border: `1px solid ${customTotal === total && total > 0
+                  ? 'rgba(22,163,74,0.2)' : 'var(--border-primary)'}`,
               }}>
               <span className="text-xs font-black" style={{ color: 'var(--text-hint)' }}>
                 입력 합계
@@ -278,13 +262,11 @@ export default function NewSettlementPage() {
                 style={{
                   color: customTotal === total && total > 0
                     ? 'var(--accent-green)'
-                    : total > 0 ? '#F09595' : 'var(--text-tertiary)',
+                    : total > 0 ? 'var(--accent-red)' : 'var(--text-tertiary)',
                 }}>
                 {customTotal.toLocaleString()}원
                 {total > 0 && customTotal !== total && (
-                  <span className="text-xs ml-1.5 font-normal">
-                    / {total.toLocaleString()}원
-                  </span>
+                  <span className="text-xs ml-1.5 font-normal">/ {total.toLocaleString()}원</span>
                 )}
               </span>
             </div>
@@ -298,14 +280,14 @@ export default function NewSettlementPage() {
                 <div key={m.id}
                   className="flex items-center gap-3 rounded-xl px-4 py-3 cursor-pointer btn-press"
                   style={{
-                    background: isSelected ? 'rgba(27,63,171,0.15)' : 'var(--bg-card)',
-                    border: `0.5px solid ${isSelected ? 'rgba(27,63,171,0.4)' : 'var(--border-primary)'}`,
+                    background: isSelected ? 'var(--ski-blue-50)' : '#fff',
+                    border: `1px solid ${isSelected ? 'var(--dku-blue-light)' : 'var(--border-primary)'}`,
                   }}
                   onClick={() => toggleMember(m.id)}>
                   <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
                     style={{
-                      background: isSelected ? 'var(--ski-blue)' : 'rgba(255,255,255,0.06)',
-                      border: `0.5px solid ${isSelected ? 'var(--ski-blue)' : 'var(--border-primary)'}`,
+                      background: isSelected ? 'var(--dku-blue-primary)' : 'var(--surface-low)',
+                      border: `1px solid ${isSelected ? 'var(--dku-blue-primary)' : 'var(--border-primary)'}`,
                     }}>
                     {isSelected && <span className="text-white text-xs font-black">✓</span>}
                   </div>
@@ -315,7 +297,7 @@ export default function NewSettlementPage() {
                     </span>
                     {isMe && (
                       <span className="text-xs ml-1.5 font-black"
-                        style={{ color: 'var(--accent-blue)' }}>나 (운영진)</span>
+                        style={{ color: 'var(--dku-blue)' }}>나 (운영진)</span>
                     )}
                     <span className="text-xs ml-1.5" style={{ color: 'var(--text-hint)' }}>
                       {m.generation}기
@@ -324,20 +306,21 @@ export default function NewSettlementPage() {
                   {!splitEqual && isSelected && (
                     <input type="number" placeholder="금액"
                       value={customAmounts[m.id] ?? ''}
-                      onChange={e => setCustomAmounts(prev => ({
-                        ...prev, [m.id]: e.target.value
-                      }))}
+                      onChange={e => setCustomAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
                       onClick={e => e.stopPropagation()}
                       className="w-24 rounded-lg px-2 py-1.5 text-xs text-right"
-                      style={inputStyle} />
+                      style={{
+                        background: 'var(--surface-low)',
+                        border: '1px solid var(--border-primary)',
+                        color: 'var(--text-primary)',
+                        outline: 'none',
+                      }} />
                   )}
                   {splitEqual && isSelected && total > 0 && (
                     <span className="text-xs font-black flex-shrink-0"
-                      style={{ color: 'var(--accent-blue)' }}>
+                      style={{ color: 'var(--dku-blue-primary)' }}>
                       {(selectedIds.indexOf(m.id) < remainder
-                        ? amountPerPerson + 1
-                        : amountPerPerson
-                      ).toLocaleString()}원
+                        ? amountPerPerson + 1 : amountPerPerson).toLocaleString()}원
                     </span>
                   )}
                 </div>
@@ -347,12 +330,15 @@ export default function NewSettlementPage() {
         </div>
 
         {error && (
-          <p className="text-xs" style={{ color: 'var(--accent-red)' }}>{error}</p>
+          <div className="rounded-xl px-4 py-3"
+            style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.15)' }}>
+            <p className="text-xs font-bold" style={{ color: 'var(--accent-red)' }}>{error}</p>
+          </div>
         )}
 
-        <button type="submit" disabled={submitting || !profile}
+        <button type="submit" disabled={submitting}
           className="w-full text-white rounded-xl py-3.5 text-sm font-black disabled:opacity-50 btn-press"
-          style={{ background: 'var(--ski-blue)' }}>
+          style={{ background: 'var(--dku-blue-primary)' }}>
           {submitting ? '등록 중...' : '정산 요청하기'}
         </button>
       </form>

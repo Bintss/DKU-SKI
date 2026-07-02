@@ -55,30 +55,18 @@ export default function SettlementPage() {
     setLoading(false)
   }, [profile, supabase])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+  useEffect(() => { fetchData() }, [fetchData])
 
-  // Realtime — 다른 사람의 정산 상태 변경을 즉시 반영
   useEffect(() => {
     if (!profile) return
-
     const channel = supabase
       .channel('settlement-list-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => {
-        fetchData()
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlement_items', filter: `user_id=eq.${profile.id}` }, () => {
-        fetchData()
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlement_items', filter: `user_id=eq.${profile.id}` }, () => fetchData())
       .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [profile, fetchData, supabase])
 
-  // 탭 복귀 시 보완 갱신
   usePageVisibilityRefetch(fetchData, { enabled: !!profile, debounceMs: 2000 })
 
   const getMyItem = (settlementId: string) =>
@@ -86,8 +74,7 @@ export default function SettlementPage() {
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
-    const now = new Date()
-    const diff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+    const diff = Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
     if (diff === 0) return '오늘'
     if (diff === 1) return '어제'
     if (diff < 7) return `${diff}일 전`
@@ -98,14 +85,11 @@ export default function SettlementPage() {
     const myItem = getMyItem(s.id)
     return myItem && myItem.status !== 'paid'
   })
-
   const historySettlements = settlements.filter(s => {
     const myItem = getMyItem(s.id)
     return myItem && myItem.status === 'paid'
   })
-
   const allSettlements = settlements
-
   const displaySettlements =
     tab === 'active' ? activeSettlements :
     tab === 'history' ? historySettlements :
@@ -114,9 +98,7 @@ export default function SettlementPage() {
   const unpaidItems = myItems.filter(i => i.status === 'unpaid')
   const pendingItems = myItems.filter(i => i.status === 'pending')
   const totalUnpaid = unpaidItems.reduce((sum, i) => sum + i.amount, 0)
-  const totalPaid = myItems
-    .filter(i => i.status === 'paid')
-    .reduce((sum, i) => sum + i.amount, 0)
+  const totalPaid = myItems.filter(i => i.status === 'paid').reduce((sum, i) => sum + i.amount, 0)
 
   const statusLabel = (status: string) => {
     if (status === 'paid') return '납부완료'
@@ -125,13 +107,9 @@ export default function SettlementPage() {
   }
 
   const statusStyle = (status: string) => {
-    if (status === 'paid') return {
-      bg: 'rgba(46,204,113,0.15)', color: 'var(--accent-green)'
-    }
-    if (status === 'pending') return {
-      bg: 'rgba(255,214,0,0.15)', color: '#FFD700'
-    }
-    return { bg: 'rgba(240,149,149,0.15)', color: '#F09595' }
+    if (status === 'paid') return { bg: 'rgba(22,163,74,0.1)', color: 'var(--accent-green)' }
+    if (status === 'pending') return { bg: 'rgba(202,138,10,0.1)', color: 'var(--accent-yellow)' }
+    return { bg: 'rgba(220,38,38,0.08)', color: 'var(--accent-red)' }
   }
 
   const toggleSelect = (id: string) => {
@@ -143,7 +121,6 @@ export default function SettlementPage() {
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return
     if (!confirm(`선택한 정산 ${selectedIds.length}건을 삭제할까요? 관련된 정산 항목도 모두 삭제돼요.`)) return
-
     setDeleting(true)
     const res = await fetch('/api/settlement/delete', {
       method: 'POST',
@@ -152,12 +129,7 @@ export default function SettlementPage() {
     })
     const result = await res.json()
     setDeleting(false)
-
-    if (!res.ok) {
-      alert(result.error ?? '삭제에 실패했어요')
-      return
-    }
-
+    if (!res.ok) { alert(result.error ?? '삭제에 실패했어요'); return }
     setSelectedIds([])
     setManageMode(false)
     fetchData()
@@ -166,7 +138,6 @@ export default function SettlementPage() {
   const handleDeleteAll = async () => {
     if (!confirm('모든 정산 내역을 삭제할까요? 이 작업은 되돌릴 수 없어요.')) return
     if (!confirm('정말로 전체 삭제하시겠어요? 한 번 더 확인할게요.')) return
-
     setDeleting(true)
     const res = await fetch('/api/settlement/delete', {
       method: 'POST',
@@ -175,12 +146,7 @@ export default function SettlementPage() {
     })
     const result = await res.json()
     setDeleting(false)
-
-    if (!res.ok) {
-      alert(result.error ?? '삭제에 실패했어요')
-      return
-    }
-
+    if (!res.ok) { alert(result.error ?? '삭제에 실패했어요'); return }
     setSelectedIds([])
     setManageMode(false)
     fetchData()
@@ -189,7 +155,7 @@ export default function SettlementPage() {
   if (profileLoading || loading) return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="h-8 rounded-full w-24 mb-5 animate-pulse"
-        style={{ background: 'rgba(255,255,255,0.06)' }} />
+        style={{ background: 'var(--surface-low)' }} />
       <SkeletonList count={3} />
     </main>
   )
@@ -207,14 +173,11 @@ export default function SettlementPage() {
         <div className="flex items-center gap-2">
           {isAdmin && (
             <button
-              onClick={() => {
-                setManageMode(!manageMode)
-                setSelectedIds([])
-              }}
+              onClick={() => { setManageMode(!manageMode); setSelectedIds([]) }}
               className="text-xs font-black px-3 py-2 rounded-xl btn-press"
               style={{
-                background: manageMode ? 'rgba(255,255,255,0.1)' : 'var(--bg-card)',
-                border: '0.5px solid var(--border-primary)',
+                background: manageMode ? 'var(--surface-low)' : '#fff',
+                border: '1px solid var(--border-primary)',
                 color: manageMode ? 'var(--text-primary)' : 'var(--text-tertiary)',
               }}>
               {manageMode ? '완료' : '관리'}
@@ -223,7 +186,7 @@ export default function SettlementPage() {
           {!manageMode && (
             <Link href="/settlement/new"
               className="text-xs font-black text-white px-4 py-2 rounded-xl btn-press"
-              style={{ background: 'var(--ski-blue)' }}>
+              style={{ background: 'var(--dku-blue-primary)' }}>
               + 정산 요청
             </Link>
           )}
@@ -233,23 +196,21 @@ export default function SettlementPage() {
       {/* 관리 모드 액션 바 */}
       {manageMode && (
         <div className="rounded-2xl p-4 mb-5 flex items-center justify-between"
-          style={{ background: 'rgba(240,149,149,0.08)', border: '0.5px solid rgba(240,149,149,0.25)' }}>
+          style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.15)' }}>
           <span className="text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
             {selectedIds.length}건 선택됨
           </span>
           <div className="flex gap-2">
-            <button
-              onClick={handleDeleteSelected}
+            <button onClick={handleDeleteSelected}
               disabled={selectedIds.length === 0 || deleting}
               className="text-xs font-black px-3 py-1.5 rounded-lg disabled:opacity-40 btn-press"
-              style={{ background: 'rgba(240,149,149,0.2)', color: '#F09595' }}>
+              style={{ background: 'rgba(220,38,38,0.1)', color: 'var(--accent-red)' }}>
               선택 삭제
             </button>
-            <button
-              onClick={handleDeleteAll}
+            <button onClick={handleDeleteAll}
               disabled={deleting}
               className="text-xs font-black px-3 py-1.5 rounded-lg disabled:opacity-40 btn-press"
-              style={{ background: '#E24B4A', color: '#fff' }}>
+              style={{ background: 'var(--accent-red)', color: '#fff' }}>
               전체 삭제
             </button>
           </div>
@@ -261,36 +222,32 @@ export default function SettlementPage() {
         <div className="grid grid-cols-2 gap-3 mb-5">
           <div className="rounded-2xl p-4"
             style={{
-              background: totalUnpaid > 0
-                ? 'rgba(240,149,149,0.1)' : 'var(--bg-card)',
-              border: `0.5px solid ${totalUnpaid > 0
-                ? 'rgba(240,149,149,0.3)' : 'var(--border-primary)'}`,
+              background: totalUnpaid > 0 ? 'rgba(220,38,38,0.06)' : '#fff',
+              border: `1px solid ${totalUnpaid > 0 ? 'rgba(220,38,38,0.15)' : 'var(--border-primary)'}`,
+              boxShadow: 'var(--shadow-sm)',
             }}>
             <p className="text-xs font-black tracking-widest uppercase mb-1"
-              style={{ color: totalUnpaid > 0 ? 'rgba(240,149,149,0.7)' : 'var(--text-hint)' }}>
+              style={{ color: totalUnpaid > 0 ? 'rgba(220,38,38,0.6)' : 'var(--text-hint)' }}>
               미납
             </p>
             <p className="text-xl font-black"
-              style={{ color: totalUnpaid > 0 ? '#F09595' : 'var(--text-tertiary)' }}>
+              style={{ color: totalUnpaid > 0 ? 'var(--accent-red)' : 'var(--text-tertiary)' }}>
               {totalUnpaid > 0 ? `${totalUnpaid.toLocaleString()}원` : '없음'}
             </p>
             {pendingItems.length > 0 && (
-              <p className="text-xs mt-1" style={{ color: '#FFD700' }}>
+              <p className="text-xs mt-1" style={{ color: 'var(--accent-yellow)' }}>
                 확인대기 {pendingItems.length}건
               </p>
             )}
             {unpaidItems.length > 0 && (
-              <p className="text-xs mt-0.5" style={{ color: 'rgba(240,149,149,0.6)' }}>
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(220,38,38,0.5)' }}>
                 {unpaidItems.length}건 미납
               </p>
             )}
           </div>
 
           <div className="rounded-2xl p-4"
-            style={{
-              background: 'var(--bg-card)',
-              border: '0.5px solid var(--border-primary)',
-            }}>
+            style={{ background: '#fff', border: '1px solid var(--border-primary)', boxShadow: 'var(--shadow-sm)' }}>
             <p className="text-xs font-black tracking-widest uppercase mb-1"
               style={{ color: 'var(--text-hint)' }}>납부 완료</p>
             <p className="text-xl font-black"
@@ -307,13 +264,9 @@ export default function SettlementPage() {
       {/* 탭 */}
       {!manageMode && (
         <div className="flex gap-4 mb-6"
-          style={{ borderBottom: '0.5px solid var(--border-primary)' }}>
+          style={{ borderBottom: '1px solid var(--border-primary)' }}>
           {[
-            {
-              value: 'active',
-              label: '진행 중',
-              badge: unpaidItems.length + pendingItems.length
-            },
+            { value: 'active', label: '진행 중', badge: unpaidItems.length + pendingItems.length },
             { value: 'history', label: '완료 내역', badge: 0 },
             { value: 'all', label: '전체', badge: 0 },
           ].map(t => (
@@ -323,26 +276,22 @@ export default function SettlementPage() {
               {t.label}
               {t.badge > 0 && (
                 <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black text-white"
-                  style={{ background: '#E24B4A' }}>
+                  style={{ background: 'var(--accent-red)' }}>
                   {t.badge}
                 </span>
               )}
               {tab === t.value && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                  style={{ background: 'var(--ski-blue)' }} />
+                  style={{ background: 'var(--dku-blue-primary)' }} />
               )}
             </button>
           ))}
         </div>
       )}
 
-      {/* 정산 목록 — 관리 모드일 땐 전체(all) 기준으로 보여줌 */}
+      {/* 정산 목록 */}
       {(manageMode ? allSettlements : displaySettlements).length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-4xl font-black mb-2"
-            style={{ color: 'rgba(255,255,255,0.05)' }}>
-            {manageMode ? 'EMPTY' : tab === 'active' ? 'ALL CLEAR' : tab === 'history' ? 'NO HISTORY' : 'EMPTY'}
-          </p>
           <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
             {manageMode ? '삭제할 정산이 없어요' :
              tab === 'active' ? '미납 정산이 없어요' :
@@ -364,14 +313,15 @@ export default function SettlementPage() {
                   onClick={() => toggleSelect(s.id)}
                   className="rounded-2xl p-5 cursor-pointer btn-press"
                   style={{
-                    background: isSelected ? 'rgba(240,149,149,0.1)' : 'var(--bg-card)',
-                    border: `0.5px solid ${isSelected ? 'rgba(240,149,149,0.4)' : 'var(--border-primary)'}`,
+                    background: isSelected ? 'rgba(220,38,38,0.06)' : '#fff',
+                    border: `1px solid ${isSelected ? 'rgba(220,38,38,0.2)' : 'var(--border-primary)'}`,
+                    boxShadow: 'var(--shadow-sm)',
                   }}>
                   <div className="flex items-start gap-3">
                     <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
                       style={{
-                        background: isSelected ? '#E24B4A' : 'rgba(255,255,255,0.06)',
-                        border: `0.5px solid ${isSelected ? '#E24B4A' : 'var(--border-primary)'}`,
+                        background: isSelected ? 'var(--accent-red)' : 'var(--surface-low)',
+                        border: `1px solid ${isSelected ? 'var(--accent-red)' : 'var(--border-primary)'}`,
                       }}>
                       {isSelected && <span className="text-white text-xs font-black">✓</span>}
                     </div>
@@ -392,18 +342,19 @@ export default function SettlementPage() {
               <Link key={s.id} href={`/settlement/${s.id}`}
                 className="block rounded-2xl p-5 card-hover btn-press"
                 style={{
-                  background: 'var(--bg-card)',
-                  border: `0.5px solid ${myItem && myItem.status === 'unpaid'
-                    ? 'rgba(240,149,149,0.3)'
+                  background: '#fff',
+                  border: `1px solid ${myItem && myItem.status === 'unpaid'
+                    ? 'rgba(220,38,38,0.2)'
                     : myItem && myItem.status === 'pending'
-                    ? 'rgba(255,214,0,0.2)'
+                    ? 'rgba(202,138,10,0.2)'
                     : 'var(--border-primary)'}`,
+                  boxShadow: 'var(--shadow-sm)',
                 }}>
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     {isMySettlement && (
                       <span className="text-xs font-black px-2 py-0.5 rounded-full"
-                        style={{ background: 'rgba(27,63,171,0.2)', color: 'var(--accent-blue)' }}>
+                        style={{ background: 'var(--ski-blue-50)', color: 'var(--dku-blue-primary)' }}>
                         내가 요청
                       </span>
                     )}
@@ -434,8 +385,8 @@ export default function SettlementPage() {
                       <p className="text-lg font-black"
                         style={{
                           color: myItem.status === 'paid' ? 'var(--text-tertiary)'
-                            : myItem.status === 'pending' ? '#FFD700'
-                            : '#F09595'
+                            : myItem.status === 'pending' ? 'var(--accent-yellow)'
+                            : 'var(--accent-red)'
                         }}>
                         {myItem.amount.toLocaleString()}원
                       </p>
@@ -452,9 +403,9 @@ export default function SettlementPage() {
                     <span className="text-xs font-black px-2.5 py-1 rounded-full"
                       style={{
                         background: new Date(s.due_date) < new Date()
-                          ? 'rgba(240,149,149,0.15)' : 'rgba(255,255,255,0.06)',
+                          ? 'rgba(220,38,38,0.08)' : 'var(--surface-low)',
                         color: new Date(s.due_date) < new Date()
-                          ? '#F09595' : 'var(--text-hint)',
+                          ? 'var(--accent-red)' : 'var(--text-hint)',
                       }}>
                       {new Date(s.due_date) < new Date()
                         ? '기한 초과' : `~${s.due_date.slice(5)}`}
