@@ -51,6 +51,7 @@ export default function FinancePage() {
         .select('id, traded_at, description, amount, account_code, account_label, is_deposit_transfer')
         .eq('season', season)
         .eq('status', 'classified')
+        .eq('is_deposit_transfer', false)
         .not('account_code', 'in', '(999,998)')
         .order('traded_at', { ascending: false }),
       supabase
@@ -61,15 +62,11 @@ export default function FinancePage() {
     ])
 
     const allTx = txData ?? []
-    if (allTx.length > 0) setLastUpdatedAt(allTx[0].traded_at)
-    else setLastUpdatedAt(null)
-
-    const displayTx = allTx.filter(tx => !tx.is_deposit_transfer)
-    setTransactions(displayTx)
-    setDepositAccounts(depositData ?? [])
+setLastUpdatedAt(allTx.length > 0 ? allTx[0].traded_at : null)
+setTransactions(allTx)
 
     const grouped: Record<string, AccountSummary> = {}
-    for (const tx of displayTx) {
+    for (const tx of allTx) {
       if (!tx.account_code) continue
       const code = tx.account_code
       const txType = getTransactionType(code, tx.amount)
