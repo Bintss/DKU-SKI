@@ -18,20 +18,10 @@ export default function AdminSettingsPage() {
   const [captainPhone, setCaptainPhone] = useState('')
   const [coachName, setCoachName] = useState('')
   const [coachPhone, setCoachPhone] = useState('')
+  const [currentSeason, setCurrentSeason] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [saved, setSaved] = useState(false)
-
-  const inputStyle = {
-    background: '#fff',
-    border: '1px solid var(--border-primary)',
-    color: 'var(--text-primary)',
-    borderRadius: '12px',
-    padding: '12px 16px',
-    fontSize: '14px',
-    width: '100%',
-    outline: 'none',
-  }
 
   useEffect(() => {
     if (!profile) return
@@ -47,6 +37,7 @@ export default function AdminSettingsPage() {
         setCaptainPhone(data.captain_phone ?? '')
         setCoachName(data.coach_name ?? '')
         setCoachPhone(data.coach_phone ?? '')
+        setCurrentSeason(data.current_season ?? '')
       }
       setLoading(false)
     }
@@ -66,6 +57,7 @@ export default function AdminSettingsPage() {
       captain_phone: captainPhone || null,
       coach_name: coachName || null,
       coach_phone: coachPhone || null,
+      current_season: currentSeason || null,
       updated_by: profile?.id,
       updated_at: new Date().toISOString(),
     })
@@ -74,15 +66,21 @@ export default function AdminSettingsPage() {
     setTimeout(() => setSaved(false), 2500)
   }
 
+  const inputStyle = {
+    background: '#fff',
+    border: '1px solid var(--border-primary)',
+    color: 'var(--text-primary)',
+    borderRadius: '12px',
+    padding: '12px 16px',
+    fontSize: '14px',
+    width: '100%',
+    outline: 'none',
+  }
+
   if (profileLoading || loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
-  )
-
-  const Section = ({ title }: { title: string }) => (
-    <p className="text-xs font-black tracking-widest uppercase mt-5 mb-2"
-      style={{ color: 'var(--text-hint)' }}>{title}</p>
   )
 
   return (
@@ -94,7 +92,20 @@ export default function AdminSettingsPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <Section title="스키부 계좌 (정산 수신)" />
+
+        {/* 현재 시즌 */}
+        <p className="text-xs font-black tracking-widest uppercase mt-1"
+          style={{ color: 'var(--text-hint)' }}>현재 시즌</p>
+        <input type="text" placeholder="예: 2026-27"
+          value={currentSeason} onChange={e => setCurrentSeason(e.target.value)}
+          style={inputStyle} />
+        <p className="text-xs -mt-1" style={{ color: 'var(--text-hint)' }}>
+          재무 공시 및 정산에 사용되는 기준 시즌이에요
+        </p>
+
+        {/* 스키부 계좌 */}
+        <p className="text-xs font-black tracking-widest uppercase mt-3"
+          style={{ color: 'var(--text-hint)' }}>스키부 계좌 (정산 수신)</p>
         <input type="text" placeholder="은행명 (예: 토스뱅크)"
           value={bankName} onChange={e => setBankName(e.target.value)}
           style={inputStyle} />
@@ -105,7 +116,9 @@ export default function AdminSettingsPage() {
           value={accountHolder} onChange={e => setAccountHolder(e.target.value)}
           style={inputStyle} />
 
-        <Section title="비상 연락처" />
+        {/* 비상 연락처 */}
+        <p className="text-xs font-black tracking-widest uppercase mt-3"
+          style={{ color: 'var(--text-hint)' }}>비상 연락처</p>
         <input type="tel" placeholder="스키 패트롤 번호"
           value={patrolPhone} onChange={e => setPatrolPhone(e.target.value)}
           style={inputStyle} />
