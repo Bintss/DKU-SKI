@@ -46,24 +46,25 @@ export default function FinancePage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     const [{ data: txData }, { data: depositData }] = await Promise.all([
-      supabase
-        .from('finance_transactions')
-        .select('id, traded_at, description, amount, account_code, account_label, is_deposit_transfer')
-        .eq('season', season)
-        .eq('status', 'classified')
-        .eq('is_deposit_transfer', false)
-        .not('account_code', 'in', '(999,998)')
-        .order('traded_at', { ascending: false }),
-      supabase
-        .from('deposit_accounts')
-        .select('name, balance')
-        .eq('season', season)
-        .order('name'),
-    ])
+  supabase
+    .from('finance_transactions')
+    .select('id, traded_at, description, amount, account_code, account_label, is_deposit_transfer')
+    .eq('season', season)
+    .eq('status', 'classified')
+    .eq('is_deposit_transfer', false)
+    .not('account_code', 'in', '(999,998)')
+    .order('traded_at', { ascending: false }),
+  supabase
+    .from('deposit_accounts')
+    .select('name, balance')
+    .eq('season', season)
+    .order('name'),
+])
 
-    const allTx = txData ?? []
+const allTx = txData ?? []
 setLastUpdatedAt(allTx.length > 0 ? allTx[0].traded_at : null)
 setTransactions(allTx)
+setDepositAccounts(depositData ?? [])
 
     const grouped: Record<string, AccountSummary> = {}
     for (const tx of allTx) {
