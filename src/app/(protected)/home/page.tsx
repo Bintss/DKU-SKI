@@ -6,6 +6,7 @@ import { SkeletonHome } from '@/components/Skeleton'
 import { useProfile } from '@/contexts/ProfileContext'
 import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 import { getTransactionType } from '@/lib/finance-codes'
+import { useSeason } from '@/hooks/useSeason'
 
 type Camp = {
   id: string
@@ -39,10 +40,9 @@ const CHANNEL_LABEL: Record<string, string> = {
   free: '자유', student: '재학생', ob: 'OB'
 }
 
-const SEASON = '2026-27'
-
 export default function HomePage() {
   const { profile, loading: profileLoading } = useProfile()
+  const { season, loading: seasonLoading } = useSeason()
   const supabase = createClient()
 
   const [upcomingCamp, setUpcomingCamp] = useState<Camp | null>(null)
@@ -54,13 +54,14 @@ export default function HomePage() {
   const [myCampDday, setMyCampDday] = useState<number | null>(null)
 
   const fetchPublicData = useCallback(async () => {
+    if (!season) return
     const today = new Date().toISOString().split('T')[0]
     const [{ data: campData }, { data: txData }, { data: postsData }] = await Promise.all([
       supabase.from('camps').select('*').gte('end_date', today).order('start_date').limit(1).single(),
       supabase
         .from('finance_transactions')
         .select('amount, account_code, traded_at')
-        .eq('season', SEASON)
+        .eq('season', season)
         .eq('status', 'classified')
         .eq('is_deposit_transfer', false)
         .not('account_code', 'in', '(999,998)')
@@ -98,7 +99,7 @@ export default function HomePage() {
       comment_count: p.comments?.length ?? 0,
     })))
     setPublicLoading(false)
-  }, [supabase])
+  }, [supabase, season])
 
   const fetchPersonalData = useCallback(async () => {
     if (!profile) return
@@ -132,7 +133,7 @@ export default function HomePage() {
 
   useEffect(() => { fetchPublicData() }, [fetchPublicData])
   useEffect(() => { if (profile) fetchPersonalData() }, [profile, fetchPersonalData])
-  usePageVisibilityRefetch(fetchPublicData)
+  usePageVisibilityRefetch(fetchPublicData, { enabled: !!season })
   usePageVisibilityRefetch(fetchPersonalData, { enabled: !!profile })
 
   const roleLabel: Record<string, string> = {
@@ -173,7 +174,7 @@ export default function HomePage() {
     return '익명'
   }
 
-  if (profileLoading || publicLoading) return (
+  if (profileLoading || publicLoading || seasonLoading) return (
     <div className="max-w-lg mx-auto pt-4"><SkeletonHome /></div>
   )
 
@@ -257,7 +258,7 @@ export default function HomePage() {
       )}
 
       {/* 재무 요약 카드 */}
-      {finance && (
+      {finance && season && (
         <a href="/finance"
           className="fade-slide-up delay-3 block rounded-2xl p-5 mb-5 card-hover btn-press"
           style={{
@@ -268,7 +269,7 @@ export default function HomePage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-xs font-black tracking-widest uppercase"
-                style={{ color: 'var(--text-tertiary)' }}>{SEASON} 재무 현황</p>
+                style={{ color: 'var(--text-tertiary)' }}>{season} 재무 현황</p>
               {finance.lastUpdatedAt && (
                 <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
                   {formatLastUpdated(finance.lastUpdatedAt)}

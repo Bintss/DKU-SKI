@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { useProfile } from '@/contexts/ProfileContext'
 import { usePageVisibilityRefetch } from '@/hooks/usePageVisibilityRefetch'
 import { ACCOUNT_CODES, getTransactionType } from '@/lib/finance-codes'
+import { useSeason } from '@/hooks/useSeason'
 
 type AccountSummary = {
   code: string
@@ -29,11 +30,10 @@ type Transaction = {
   is_deposit_transfer: boolean
 }
 
-const CURRENT_SEASON = '2026-27'
-
 export default function FinancePage() {
   const { profile, loading: profileLoading } = useProfile()
-  const [season, setSeason] = useState(CURRENT_SEASON)
+  const { season: currentSeason, loading: seasonLoading } = useSeason()
+  const [season, setSeason] = useState<string>('')
   const [summary, setSummary] = useState<AccountSummary[]>([])
   const [depositAccounts, setDepositAccounts] = useState<DepositAccount[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -43,28 +43,33 @@ export default function FinancePage() {
   const [filterCode, setFilterCode] = useState<string | null>(null)
   const supabase = createClient()
 
+  useEffect(() => {
+    if (currentSeason && !season) setSeason(currentSeason)
+  }, [currentSeason])
+
   const fetchData = useCallback(async () => {
+    if (!season) return
     setLoading(true)
     const [{ data: txData }, { data: depositData }] = await Promise.all([
-  supabase
-    .from('finance_transactions')
-    .select('id, traded_at, description, amount, account_code, account_label, is_deposit_transfer')
-    .eq('season', season)
-    .eq('status', 'classified')
-    .eq('is_deposit_transfer', false)
-    .not('account_code', 'in', '(999,998)')
-    .order('traded_at', { ascending: false }),
-  supabase
-    .from('deposit_accounts')
-    .select('name, balance')
-    .eq('season', season)
-    .order('name'),
-])
+      supabase
+        .from('finance_transactions')
+        .select('id, traded_at, description, amount, account_code, account_label, is_deposit_transfer')
+        .eq('season', season)
+        .eq('status', 'classified')
+        .eq('is_deposit_transfer', false)
+        .not('account_code', 'in', '(999,998)')
+        .order('traded_at', { ascending: false }),
+      supabase
+        .from('deposit_accounts')
+        .select('name, balance')
+        .eq('season', season)
+        .order('name'),
+    ])
 
-const allTx = txData ?? []
-setLastUpdatedAt(allTx.length > 0 ? allTx[0].traded_at : null)
-setTransactions(allTx)
-setDepositAccounts(depositData ?? [])
+    const allTx = txData ?? []
+    setLastUpdatedAt(allTx.length > 0 ? allTx[0].traded_at : null)
+    setTransactions(allTx)
+    setDepositAccounts(depositData ?? [])
 
     const grouped: Record<string, AccountSummary> = {}
     for (const tx of allTx) {
@@ -100,7 +105,7 @@ setDepositAccounts(depositData ?? [])
   }, [supabase, season])
 
   useEffect(() => { fetchData() }, [fetchData])
-  usePageVisibilityRefetch(fetchData, { enabled: true, debounceMs: 5000 })
+  usePageVisibilityRefetch(fetchData, { enabled: !!season, debounceMs: 5000 })
 
   const totalIncome = summary.filter(s => s.type === 'income').reduce((sum, s) => sum + s.amount, 0)
   const totalExpense = summary.filter(s => s.type === 'expense').reduce((sum, s) => sum + Math.abs(s.amount), 0)
@@ -130,7 +135,18 @@ setDepositAccounts(depositData ?? [])
     ? summary.find(s => getFilterKey(s) === filterCode)?.label ?? filterCode
     : null
 
-  if (profileLoading || loading) return (
+  // 이전 시즌 목록 — currentSeason 기준으로 동적 생성
+  const seasonOptions = (() => {
+    if (!currentSeason) return []
+    const [startYear] = currentSeason.split('-').map(Number)
+    const options: string[] = []
+    for (let y = startYear; y >= startYear - 3; y--) {
+      options.push(`${y}-${String(y + 1).slice(-2)}`)
+    }
+    return options
+  })()
+
+  if (profileLoading || seasonLoading || loading || !season) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-sm" style={{ color: 'var(--text-hint)' }}>불러오는 중...</p>
     </div>
@@ -158,12 +174,13 @@ setDepositAccounts(depositData ?? [])
             color: 'var(--text-secondary)',
             outline: 'none',
           }}>
-          <option value="2026-27">2026-27</option>
-          <option value="2025-26">2025-26</option>
+          {seasonOptions.map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
         </select>
       </div>
 
-      {/* 요약 카드 — 그라데이션 유지 (어두운 배경 위 흰 텍스트라 그대로 둬도 OK) */}
+      {/* 요약 카드 */}
       <div className="rounded-2xl p-5 mb-4 relative overflow-hidden"
         style={{
           background: 'linear-gradient(135deg, var(--dku-blue-primary) 0%, var(--dku-blue) 100%)',
@@ -178,9 +195,7 @@ setDepositAccounts(depositData ?? [])
         <div className="grid grid-cols-3 gap-4 mb-4">
           <div>
             <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.5)' }}>수입</p>
-            <p className="text-lg font-black text-white">
-              {(totalIncome / 10000).toFixed(0)}만
-            </p>
+            <p className="text-lg font-black text-white">{(totalIncome / 10000).toFixed(0)}만</p>
           </div>
           <div>
             <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.5)' }}>지출</p>
@@ -198,8 +213,7 @@ setDepositAccounts(depositData ?? [])
         </div>
 
         {totalDeposit > 0 && (
-          <div className="rounded-xl p-3 mb-4"
-            style={{ background: 'rgba(255,255,255,0.12)' }}>
+          <div className="rounded-xl p-3 mb-4" style={{ background: 'rgba(255,255,255,0.12)' }}>
             <div className="flex items-center justify-between mb-1">
               <p className="text-xs font-black" style={{ color: 'rgba(255,255,255,0.7)' }}>
                 예치금 포함 총 자산
@@ -214,8 +228,7 @@ setDepositAccounts(depositData ?? [])
           </div>
         )}
 
-        <div className="h-1 rounded-full overflow-hidden"
-          style={{ background: 'rgba(255,255,255,0.2)' }}>
+        <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.2)' }}>
           <div className="h-full rounded-full"
             style={{
               width: `${Math.min(totalIncome > 0 ? (totalExpense / totalIncome) * 100 : 0, 100)}%`,
@@ -253,7 +266,6 @@ setDepositAccounts(depositData ?? [])
           <h2 className="text-xs font-black tracking-widest uppercase mb-4"
             style={{ color: 'var(--text-hint)' }}>항목별 내역</h2>
 
-          {/* 수입 */}
           {summary.filter(s => s.type === 'income').length > 0 && (
             <div className="mb-4">
               <p className="text-xs font-black mb-3" style={{ color: 'var(--dku-blue)' }}>수입</p>
@@ -275,8 +287,7 @@ setDepositAccounts(depositData ?? [])
                           +{fmt(s.amount)}
                         </span>
                       </div>
-                      <div className="h-1 rounded-full overflow-hidden"
-                        style={{ background: 'var(--surface-low)' }}>
+                      <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--surface-low)' }}>
                         <div className="h-full rounded-full transition-all"
                           style={{
                             width: `${totalIncome > 0 ? (s.amount / totalIncome) * 100 : 0}%`,
@@ -290,7 +301,6 @@ setDepositAccounts(depositData ?? [])
             </div>
           )}
 
-          {/* 지출 */}
           {summary.filter(s => s.type === 'expense').length > 0 && (
             <div>
               <p className="text-xs font-black mb-3" style={{ color: 'var(--accent-red)' }}>지출</p>
@@ -312,8 +322,7 @@ setDepositAccounts(depositData ?? [])
                           -{fmt(Math.abs(s.amount))}
                         </span>
                       </div>
-                      <div className="h-1 rounded-full overflow-hidden"
-                        style={{ background: 'var(--surface-low)' }}>
+                      <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--surface-low)' }}>
                         <div className="h-full rounded-full transition-all"
                           style={{
                             width: `${totalExpense > 0 ? (Math.abs(s.amount) / totalExpense) * 100 : 0}%`,
@@ -339,9 +348,7 @@ setDepositAccounts(depositData ?? [])
             style={{ color: 'var(--text-hint)' }}>
             거래 내역
             <span className="ml-2 font-black" style={{ color: 'var(--text-tertiary)' }}>
-              {filteredLabel
-                ? `${filteredLabel} · ${filteredTx.length}건`
-                : `${transactions.length}건`}
+              {filteredLabel ? `${filteredLabel} · ${filteredTx.length}건` : `${transactions.length}건`}
             </span>
           </h2>
           <div className="flex items-center gap-2">
