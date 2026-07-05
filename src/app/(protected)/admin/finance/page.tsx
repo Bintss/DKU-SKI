@@ -88,6 +88,7 @@ export default function AdminFinancePage() {
       .from('finance_transactions')
       .select('*')
       .eq('season', season)
+      .not('account_code', 'in', '(999,998)')
       .order('traded_at', { ascending: false })
     setTransactions(data ?? [])
     setLoading(false)
