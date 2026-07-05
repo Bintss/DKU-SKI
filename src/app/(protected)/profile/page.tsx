@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
+import { subscribePush } from '@/lib/push'
 
 const SKI_LEVELS = [
   { value: 'beginner', label: '처음' },
@@ -41,6 +42,11 @@ export default function ProfilePage() {
   const [refundAccountHolder, setRefundAccountHolder] = useState('')
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  // 푸시 알림
+  const [pushStatus, setPushStatus] = useState<'unknown' | 'granted' | 'denied' | 'unsupported'>('unknown')
+  const [pushLoading, setPushLoading] = useState(false)
+
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -63,6 +69,31 @@ export default function ProfilePage() {
     setRefundAccountNumber(p.refund_account_number ?? '')
     setRefundAccountHolder(p.refund_account_holder ?? '')
   }, [profile])
+
+  // 푸시 알림 현재 상태 확인
+  useEffect(() => {
+    if (!('Notification' in window)) {
+      setPushStatus('unsupported')
+      return
+    }
+    if (Notification.permission === 'granted') setPushStatus('granted')
+    else if (Notification.permission === 'denied') setPushStatus('denied')
+    else setPushStatus('unknown')
+  }, [])
+
+  const handlePushSubscribe = async () => {
+    setPushLoading(true)
+    const success = await subscribePush()
+    if (success) {
+      setPushStatus('granted')
+    } else {
+      if (Notification.permission === 'denied') {
+        setPushStatus('denied')
+        alert('알림이 차단되어 있어요. 브라우저 설정에서 알림을 허용해주세요.')
+      }
+    }
+    setPushLoading(false)
+  }
 
   const formatPhoneInput = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 11)
@@ -485,6 +516,64 @@ export default function ProfilePage() {
             style={{ color: profile.bio ? 'var(--text-secondary)' : 'var(--text-hint)' }}>
             {profile.bio || '자기소개를 작성해보세요'}
           </p>
+        )}
+      </div>
+
+      {/* 푸시 알림 */}
+      <div style={sectionCard}>
+        <p style={sectionTitle}>알림 설정</p>
+        {pushStatus === 'unsupported' ? (
+          <p className="text-sm" style={{ color: 'var(--text-hint)' }}>
+            이 브라우저는 푸시 알림을 지원하지 않아요
+          </p>
+        ) : pushStatus === 'granted' ? (
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(22,163,74,0.1)' }}>
+              <span style={{ fontSize: 16 }}>🔔</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>알림 허용됨</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                정산 요청, 승인 알림을 받을 수 있어요
+              </p>
+            </div>
+            <span className="text-xs font-black px-2.5 py-1 rounded-full"
+              style={{ background: 'rgba(22,163,74,0.1)', color: 'var(--accent-green)' }}>
+              ON
+            </span>
+          </div>
+        ) : pushStatus === 'denied' ? (
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(220,38,38,0.08)' }}>
+              <span style={{ fontSize: 16 }}>🔕</span>
+            </div>
+            <div>
+              <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>알림 차단됨</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                브라우저 설정에서 알림을 허용해주세요
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--surface-low)' }}>
+              <span style={{ fontSize: 16 }}>🔔</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>푸시 알림</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                정산 요청, 승인 알림을 받을 수 있어요
+              </p>
+            </div>
+            <button onClick={handlePushSubscribe} disabled={pushLoading}
+              className="text-xs font-black px-3 py-2 rounded-xl disabled:opacity-50 btn-press flex-shrink-0"
+              style={{ background: 'var(--dku-blue-primary)', color: '#fff' }}>
+              {pushLoading ? '설정 중...' : '알림 허용'}
+            </button>
+          </div>
         )}
       </div>
 
