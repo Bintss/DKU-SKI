@@ -55,11 +55,11 @@ export default function HomePage() {
 
   const fetchPublicData = useCallback(async () => {
     const today = new Date().toISOString().split('T')[0]
-    const [{ data: campData }, { data: financeData }, { data: postsData }] = await Promise.all([
+    const [{ data: campData }, { data: txData }, { data: postsData }] = await Promise.all([
       supabase.from('camps').select('*').gte('end_date', today).order('start_date').limit(1).single(),
       supabase
         .from('finance_transactions')
-        .select('amount, account_code, is_deposit_transfer, traded_at')
+        .select('amount, account_code, traded_at')
         .eq('season', SEASON)
         .eq('status', 'classified')
         .eq('is_deposit_transfer', false)
@@ -74,8 +74,8 @@ export default function HomePage() {
 
     setUpcomingCamp(campData)
 
-    if (financeData) {
-      const rows = financeData as { amount: number; account_code: string | null; traded_at: string }[]
+    if (txData && txData.length > 0) {
+      const rows = txData as { amount: number; account_code: string | null; traded_at: string }[]
       const totalIncome = rows
         .filter(r => r.account_code && getTransactionType(r.account_code, r.amount) === 'income')
         .reduce((s, r) => s + r.amount, 0)
@@ -83,10 +83,13 @@ export default function HomePage() {
         .filter(r => r.account_code && getTransactionType(r.account_code, r.amount) === 'expense')
         .reduce((s, r) => s + Math.abs(r.amount), 0)
       setFinance({
-        totalIncome, totalExpense,
+        totalIncome,
+        totalExpense,
         balance: totalIncome - totalExpense,
-        lastUpdatedAt: rows.length > 0 ? rows[0].traded_at : null,
+        lastUpdatedAt: rows[0].traded_at,
       })
+    } else {
+      setFinance(null)
     }
 
     setRecentPosts((postsData ?? []).map((p: any) => ({
@@ -185,10 +188,7 @@ export default function HomePage() {
           boxShadow: 'var(--shadow-blue)',
         }}>
         <div className="absolute top-0 right-0 w-40 h-40 rounded-full"
-          style={{
-            background: 'rgba(255,255,255,0.06)',
-            transform: 'translate(30%, -30%)',
-          }} />
+          style={{ background: 'rgba(255,255,255,0.06)', transform: 'translate(30%, -30%)' }} />
         <div className="flex items-center justify-between relative">
           <div>
             <p className="text-xs mb-1 font-medium" style={{ color: 'rgba(255,255,255,0.55)' }}>
@@ -246,16 +246,12 @@ export default function HomePage() {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold px-2.5 py-1 rounded-full"
               style={{
-                background: upcomingCamp.is_open
-                  ? 'rgba(22,163,74,0.1)' : 'var(--surface-low)',
-                color: upcomingCamp.is_open
-                  ? 'var(--accent-green)' : 'var(--text-hint)',
+                background: upcomingCamp.is_open ? 'rgba(22,163,74,0.1)' : 'var(--surface-low)',
+                color: upcomingCamp.is_open ? 'var(--accent-green)' : 'var(--text-hint)',
               }}>
               {upcomingCamp.is_open ? '신청 중' : '신청 마감'}
             </span>
-            <span className="text-xs font-bold" style={{ color: 'var(--dku-blue)' }}>
-              자세히 →
-            </span>
+            <span className="text-xs font-bold" style={{ color: 'var(--dku-blue)' }}>자세히 →</span>
           </div>
         </a>
       )}
@@ -292,17 +288,14 @@ export default function HomePage() {
               },
             ].map(item => (
               <div key={item.label}>
-                <p className="text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
-                  {item.label}
-                </p>
+                <p className="text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>{item.label}</p>
                 <p className="text-base font-black" style={{ color: item.color }}>
                   {(Math.abs(item.value) / 10000).toFixed(0)}만
                 </p>
               </div>
             ))}
           </div>
-          <div className="h-1 rounded-full overflow-hidden"
-            style={{ background: 'var(--surface-low)' }}>
+          <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--surface-low)' }}>
             <div className="h-full rounded-full"
               style={{
                 width: `${Math.min(finance.totalIncome > 0
