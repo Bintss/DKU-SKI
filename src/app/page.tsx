@@ -72,7 +72,7 @@ export default function LandingPage() {
   const f = FEATURES[current]
 
   return (
-    <main className="min-h-screen flex flex-col"
+    <main className="h-screen flex flex-col overflow-hidden"
       style={{ background: 'var(--surface)' }}>
 
       {/* 상단 로고 */}
@@ -98,9 +98,10 @@ export default function LandingPage() {
       {/* 기능 소개 슬라이드 */}
       <div className="flex-1 flex flex-col items-center justify-center px-6">
         <div
-          className="w-full max-w-sm"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}>
+  className="w-full max-w-sm"
+  onTouchStart={handleTouchStart}
+  onTouchEnd={handleTouchEnd}
+  style={{ touchAction: 'pan-x' }}>
 
           {/* 카드 */}
           <div
