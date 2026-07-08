@@ -62,42 +62,45 @@ export async function GET(req: NextRequest) {
 
     const transactions: BankTransaction[] = isMock
       ? [
-          {
-            date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-            time: '120000',
-            displayName: '테스트합숙비',
-            counterparty: '',
-            description: '이체',
-            amount: 9000,
-            balance: 1000000,
-            type: 'deposit',
-            branch: '',
-            memo: '',
-          },
-          {
-            date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-            time: '120100',
-            displayName: '테스트회비',
-            counterparty: '',
-            description: '이체',
-            amount: 5000,
-            balance: 1005000,
-            type: 'deposit',
-            branch: '',
-            memo: '',
-          },
-          {
-            date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-            time: '120200',
-            displayName: '알수없는입금',
-            counterparty: '',
-            description: '이체',
-            amount: 50000,
-            balance: 1055000,
-            type: 'deposit',
-            branch: '',
-            memo: '',
-          },
+          // Case 1: 송금명 ✅ + 금액 ✅
+{
+  date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+  time: '130000',
+  displayName: '신정우합숙비',  // ← 변경
+  counterparty: '',
+  description: '이체',
+  amount: 9000,               // ← 정확한 금액
+  balance: 1000000,
+  type: 'deposit',
+  branch: '',
+  memo: '',
+},
+// Case 2: 송금명 ✅ + 금액 ❌
+{
+  date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+  time: '130100',
+  displayName: '차현우합숙비',  // ← 변경
+  counterparty: '',
+  description: '이체',
+  amount: 5000,               // ← 의도적으로 틀린 금액
+  balance: 1005000,
+  type: 'deposit',
+  branch: '',
+  memo: '',
+},
+// Case 3: 송금명 ❌ (그대로 유지)
+{
+  date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+  time: '130200',
+  displayName: '알수없는입금',
+  counterparty: '',
+  description: '이체',
+  amount: 50000,
+  balance: 1055000,
+  type: 'deposit',
+  branch: '',
+  memo: '',
+},
         ]
       : await (async () => {
           const bankRes = await fetch('https://api.bankapi.co.kr/v1/transactions', {
