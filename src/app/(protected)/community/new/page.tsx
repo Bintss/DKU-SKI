@@ -75,12 +75,22 @@ export default function NewPostPage() {
     if (!content.trim()) { setError('내용을 입력해주세요'); return }
     setSubmitting(true); setError('')
 
-    const { data, error } = await supabase.from('posts').insert({
-      title: title.trim(), content: content.trim(),
-      channel, is_anonymous: isAnonymous,
-      author_id: profile.id,
-      image_urls: imageUrls.length > 0 ? imageUrls : null,
-    }).select().single()
+    const insertData: any = {
+  title: title.trim(),
+  content: content.trim(),
+  channel,
+  is_anonymous: isAnonymous,
+  author_id: profile.id,
+}
+if (imageUrls.length > 0) {
+  insertData.image_urls = imageUrls
+}
+
+const { data, error } = await supabase
+  .from('posts')
+  .insert(insertData)
+  .select()
+  .single()
 
     if (error) { setError(error.message); setSubmitting(false); return }
     router.push(`/community/${data.id}`)
