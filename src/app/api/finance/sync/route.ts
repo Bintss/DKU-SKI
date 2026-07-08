@@ -249,6 +249,13 @@ if (!matchedItem) {
 
       // Case 2: 송금명 ✅ + 금액 ❌ → pending 유지 + 운영진 알림
       pendingCount++
+      await adminClient
+  .from('settlement_items')
+  .update({
+    status: 'pending',
+    actual_amount: tx.amount,  // ← 실제 입금액 저장
+  })
+  .eq('id', matchedItem.id)
 
       // 운영진 알림 (정산 페이지 링크 포함)
       sendToUsers(

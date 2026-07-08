@@ -25,6 +25,7 @@ type SettlementItem = {
   id: string
   user_id: string
   amount: number
+  actual_amount: number | null
   status: 'unpaid' | 'pending' | 'paid'
   is_paid: boolean
   paid_at: string | null
@@ -149,7 +150,8 @@ export default function SettlementDetailPage() {
     if (memberProfile?.refund_account_number) {
       // 환불 금액: 실제 입금액 (amount_mismatch의 경우 다를 수 있으나
       // 현재는 item.amount 기준으로 환불 — 추후 actualAmount 파라미터로 개선 가능)
-      const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
+      const refundAmount = item.actual_amount ?? item.amount
+      const tossUrl = `supertoss://send?amount=${refundAmount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
       window.location.href = tossUrl
       setTimeout(() => { window.open('https://toss.me/transfer', '_blank') }, 500)
     } else {
@@ -493,6 +495,35 @@ export default function SettlementDetailPage() {
 
                       <RefundAccountPreview userId={item.user_id} supabase={supabase} />
 
+                      {/* 반려 처리 패널에서 금액 불일치인 경우 실제 입금액 표시 */}
+{item.actual_amount && item.actual_amount !== item.amount && (
+  <div className="rounded-xl p-3"
+    style={{ background: 'rgba(202,138,10,0.08)', border: '1px solid rgba(202,138,10,0.2)' }}>
+    <p className="text-xs font-black mb-1" style={{ color: 'var(--accent-yellow)' }}>
+      금액 불일치
+    </p>
+    <div className="flex items-center justify-between">
+      <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>정산 금액</span>
+      <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
+        {item.amount.toLocaleString()}원
+      </span>
+    </div>
+    <div className="flex items-center justify-between mt-1">
+      <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>실제 입금액</span>
+      <span className="text-xs font-bold" style={{ color: 'var(--accent-red)' }}>
+        {item.actual_amount.toLocaleString()}원
+      </span>
+    </div>
+    <div className="flex items-center justify-between mt-1 pt-1"
+      style={{ borderTop: '1px solid rgba(202,138,10,0.2)' }}>
+      <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>환불 금액</span>
+      <span className="text-xs font-black" style={{ color: 'var(--accent-red)' }}>
+        {item.actual_amount.toLocaleString()}원
+      </span>
+    </div>
+  </div>
+)}
+                    
                       <button onClick={() => handleReject(item)}
                         className="w-full rounded-xl py-2.5 text-xs font-black btn-press"
                         style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)', color: 'var(--accent-red)' }}>
