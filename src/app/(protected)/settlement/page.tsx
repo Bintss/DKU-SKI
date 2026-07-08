@@ -102,7 +102,7 @@ export default function SettlementPage() {
 
   const statusLabel = (status: string) => {
     if (status === 'paid') return '납부완료'
-    if (status === 'pending') return '확인 대기'
+    if (status === 'pending') return '입금 확인 중'
     return '미납'
   }
 
@@ -236,7 +236,7 @@ export default function SettlementPage() {
             </p>
             {pendingItems.length > 0 && (
               <p className="text-xs mt-1" style={{ color: 'var(--accent-yellow)' }}>
-                확인대기 {pendingItems.length}건
+                입금 확인 중 {pendingItems.length}건
               </p>
             )}
             {unpaidItems.length > 0 && (

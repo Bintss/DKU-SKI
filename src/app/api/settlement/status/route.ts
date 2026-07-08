@@ -20,8 +20,12 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const { itemId, action, rejectReason } = body
+    // action: 'confirm_deposit' (unpaid → pending, 운영진)
+    //       | 'mark_paid'       (pending → paid, 운영진)
+    //       | 'revert_unpaid'   (paid → unpaid, 운영진)
+    //       | 'reject'          (pending → unpaid + reject_reason, 운영진)
 
-    const validActions = ['request_confirm', 'cancel_pending', 'mark_paid', 'revert_unpaid', 'reject']
+    const validActions = ['confirm_deposit', 'mark_paid', 'revert_unpaid', 'reject']
     if (!itemId || !validActions.includes(action)) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
     }
@@ -57,45 +61,26 @@ export async function POST(req: NextRequest) {
 
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    const isOwner = item.user_id === user.id
     const { data: requesterProfile } = await adminClient
-      .from('profiles').select('role, name').eq('id', user.id).single()
+      .from('profiles').select('role').eq('id', user.id).single()
     const isAdmin = requesterProfile?.role === 'admin'
     const isCreator = item.settlements?.created_by === user.id
-    const canConfirm = isCreator || isAdmin
 
-    if (action === 'request_confirm' || action === 'cancel_pending') {
-      if (!isOwner) {
-        return NextResponse.json({ error: 'Forbidden: not item owner' }, { status: 403 })
-      }
-    }
-    if (action === 'mark_paid' || action === 'revert_unpaid' || action === 'reject') {
-      if (!canConfirm) {
-        return NextResponse.json({ error: 'Forbidden: requester or admin only' }, { status: 403 })
-      }
+    if (!isAdmin && !isCreator) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     let newStatus: string
     let updateData: Record<string, unknown>
 
     switch (action) {
-      case 'request_confirm':
+      case 'confirm_deposit':
+        // 운영진이 수동으로 입금 확인 (Case 3 — 송금명 불일치)
         if (item.status !== 'unpaid') {
           return NextResponse.json({ error: 'Invalid state transition' }, { status: 400 })
         }
         newStatus = 'pending'
-        updateData = {
-          status: 'pending',
-          reject_reason: null,
-        }
-        break
-
-      case 'cancel_pending':
-        if (item.status !== 'pending') {
-          return NextResponse.json({ error: 'Invalid state transition' }, { status: 400 })
-        }
-        newStatus = 'unpaid'
-        updateData = { status: 'unpaid' }
+        updateData = { status: 'pending' }
         break
 
       case 'mark_paid':
@@ -150,27 +135,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    // 알림 발송
     const settlementTitle = item.settlements?.title ?? '정산'
     const settlementId = item.settlement_id
 
-    if (action === 'request_confirm' && item.settlements?.created_by) {
-      const wasRejected = !!item.reject_reason
-      sendToUsers(
-        adminClient,
-        [item.settlements.created_by],
-        wasRejected ? '재송금 확인 요청' : '송금 확인 요청',
-        `${requesterProfile?.name ?? '누군가'}님이 "${settlementTitle}" ${wasRejected ? '재' : ''}송금을 완료했어요. 확인해주세요!`,
-        `/settlement/${settlementId}`
-      ).catch(err => console.error('push send error:', err))
-    }
-
+    // 납부 확인 완료 알림
     if (action === 'mark_paid') {
       sendToUsers(
         adminClient,
         [item.user_id],
         '정산 납부 확인 완료',
-        `"${settlementTitle}" 정산 ${item.amount.toLocaleString()}원 납부가 확인됐어요!`,
+        `"${settlementTitle}" ${item.amount.toLocaleString()}원 납부가 확인됐어요!`,
+        `/settlement/${settlementId}`
+      ).catch(err => console.error('push send error:', err))
+    }
+
+    // 입금 확인 알림 (운영진이 수동 pending 전환)
+    if (action === 'confirm_deposit') {
+      sendToUsers(
+        adminClient,
+        [item.user_id],
+        '입금 확인 중',
+        `"${settlementTitle}" 입금이 확인됐어요. 운영진이 검토 후 처리해요.`,
         `/settlement/${settlementId}`
       ).catch(err => console.error('push send error:', err))
     }

@@ -41,7 +41,7 @@ type ClubAccount = {
 
 const STATUS_LABEL: Record<string, string> = {
   unpaid: '미납',
-  pending: '확인 대기',
+  pending: '입금 확인 중',
   paid: '납부완료',
 }
 
@@ -69,7 +69,6 @@ export default function SettlementDetailPage() {
   const [loading, setLoading] = useState(true)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('wrong_transfer_name')
-  const [copied, setCopied] = useState(false)
 
   const fetchData = useCallback(async () => {
     if (!profile) return
@@ -77,7 +76,8 @@ export default function SettlementDetailPage() {
       supabase.from('settlements').select('*, profiles(name)').eq('id', id).single(),
       supabase.from('settlement_items')
         .select('*, profiles(name, generation)')
-        .eq('settlement_id', id).order('status'),
+        .eq('settlement_id', id)
+        .order('status'),
       supabase.from('club_settings').select('*').eq('id', 1).single(),
     ])
     setSettlement(settlementData)
@@ -112,30 +112,50 @@ export default function SettlementDetailPage() {
 
   const handleReject = async (item: SettlementItem) => {
     if (!rejectReason) return
+
     const res = await fetch('/api/settlement/status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId: item.id, action: 'reject', rejectReason }),
+      body: JSON.stringify({
+        itemId: item.id,
+        action: 'reject',
+        rejectReason,
+      }),
     })
     if (!res.ok) {
       const result = await res.json()
       alert(result.error ?? '반려 처리에 실패했어요')
       return
     }
-    if (rejectReason === 'wrong_transfer_name') {
-      await navigator.clipboard.writeText('송금명오류').catch(() => {})
+
+    // 송금명 오류: "송금명오류환급" 복사 + 토스 딥링크
+    // 금액 불일치: "금액불일치환급" 복사 + 토스 딥링크
+    const clipboardText = rejectReason === 'wrong_transfer_name'
+      ? '송금명불일치'
+      : rejectReason === 'amount_mismatch'
+      ? '금액불일치환급'
+      : null
+
+    if (clipboardText) {
+      await navigator.clipboard.writeText(clipboardText).catch(() => {})
     }
+
     const { data: memberProfile } = await supabase
       .from('profiles')
       .select('name, refund_bank_name, refund_account_number, refund_account_holder')
-      .eq('id', item.user_id).single()
+      .eq('id', item.user_id)
+      .single()
+
     if (memberProfile?.refund_account_number) {
+      // 환불 금액: 실제 입금액 (amount_mismatch의 경우 다를 수 있으나
+      // 현재는 item.amount 기준으로 환불 — 추후 actualAmount 파라미터로 개선 가능)
       const tossUrl = `supertoss://send?amount=${item.amount}&bank=${encodeURIComponent(memberProfile.refund_bank_name ?? '')}&accountNo=${memberProfile.refund_account_number}&origin=qr`
       window.location.href = tossUrl
       setTimeout(() => { window.open('https://toss.me/transfer', '_blank') }, 500)
     } else {
       alert(`${memberProfile?.name ?? '해당 부원'}의 환급 계좌가 등록되어 있지 않아요.\n직접 환불 후 처리해주세요.`)
     }
+
     setRejectingId(null)
     setRejectReason('wrong_transfer_name')
     fetchData()
@@ -146,23 +166,6 @@ export default function SettlementDetailPage() {
     await supabase.from('settlement_items').delete().eq('settlement_id', id)
     await supabase.from('settlements').delete().eq('id', id)
     router.push('/settlement')
-  }
-
-  const handleCopyTransferName = async (transferName: string) => {
-    await navigator.clipboard.writeText(transferName)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const openToss = (account: ClubAccount, amount: number) => {
-    const tossUrl = `supertoss://send?amount=${amount}&bank=${encodeURIComponent(account.bank_name ?? '')}&accountNo=${account.account_number}&origin=qr`
-    window.location.href = tossUrl
-    setTimeout(() => { window.open('https://toss.me/transfer', '_blank') }, 500)
-  }
-
-  const copyAccount = async (account: ClubAccount) => {
-    await navigator.clipboard.writeText(account.account_number ?? '')
-    alert('계좌번호가 복사됐어요')
   }
 
   const isAdmin = profile?.role === 'admin'
@@ -229,7 +232,7 @@ export default function SettlementDetailPage() {
           style={{ borderTop: '1px solid var(--border-primary)' }}>
           {[
             { label: '납부완료', count: paidCount, color: 'var(--accent-green)' },
-            { label: '확인대기', count: pendingCount, color: 'var(--accent-yellow)' },
+            { label: '확인 중', count: pendingCount, color: 'var(--accent-yellow)' },
             { label: '미납', count: unpaidCount, color: 'var(--accent-red)' },
           ].map(item => (
             <div key={item.label} className="text-center">
@@ -279,48 +282,58 @@ export default function SettlementDetailPage() {
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
                 {myItem.reject_reason === 'wrong_transfer_name'
                   ? '아래 송금명을 확인하고 다시 송금해주세요'
-                  : '운영진에게 문의하거나 다시 송금해주세요'}
+                  : myItem.reject_reason === 'amount_mismatch'
+                  ? '정확한 금액으로 다시 송금해주세요'
+                  : '운영진에게 문의해주세요'}
               </p>
             </div>
           )}
 
-          {/* 송금명 복사 */}
+          {/* 송금명 안내 */}
           {myItem.transfer_name && myItem.status === 'unpaid' && (
             <div className="rounded-xl p-3 mb-3"
               style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)' }}>
               <p className="text-xs mb-1.5" style={{ color: 'var(--text-hint)' }}>
-                송금 시 이 이름으로 보내주세요
+                아래 송금명으로 정확히 보내주세요
               </p>
               <div className="flex items-center gap-2">
                 <p className="text-base font-black flex-1" style={{ color: 'var(--text-primary)' }}>
                   {myItem.transfer_name}
                 </p>
                 <button
-                  onClick={() => handleCopyTransferName(myItem.transfer_name!)}
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(myItem.transfer_name!)
+                    alert('송금명이 복사됐어요')
+                  }}
                   className="text-xs font-black px-3 py-1.5 rounded-lg btn-press flex-shrink-0"
-                  style={{
-                    background: copied ? 'rgba(22,163,74,0.1)' : 'var(--ski-blue-50)',
-                    color: copied ? 'var(--accent-green)' : 'var(--dku-blue-primary)',
-                  }}>
-                  {copied ? '복사됨 ✓' : '복사'}
+                  style={{ background: 'var(--ski-blue-50)', color: 'var(--dku-blue-primary)' }}>
+                  복사
                 </button>
               </div>
             </div>
           )}
 
-          {/* 송금 액션 */}
+          {/* 송금 안내 */}
           {myItem.status === 'unpaid' && clubAccount?.account_number && (
             <div className="flex flex-col gap-2 mb-2">
               <button
                 onClick={() => {
-                  if (myItem.transfer_name) handleCopyTransferName(myItem.transfer_name)
-                  openToss(clubAccount, myItem.amount)
+                  if (myItem.transfer_name) {
+                    navigator.clipboard.writeText(myItem.transfer_name).catch(() => {})
+                  }
+                  const tossUrl = `supertoss://send?amount=${myItem.amount}&bank=${encodeURIComponent(clubAccount.bank_name ?? '')}&accountNo=${clubAccount.account_number}&origin=qr`
+                  window.location.href = tossUrl
+                  setTimeout(() => { window.open('https://toss.me/transfer', '_blank') }, 500)
                 }}
                 className="w-full rounded-xl py-3 text-sm font-black btn-press"
                 style={{ background: '#FEE500', color: '#3A1D1D' }}>
                 {myItem.transfer_name ? '송금명 복사 + 토스로 송금' : '토스로 간편 송금'}
               </button>
-              <button onClick={() => copyAccount(clubAccount)}
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(clubAccount.account_number ?? '')
+                  alert('계좌번호가 복사됐어요')
+                }}
                 className="w-full rounded-xl py-2.5 text-xs font-bold btn-press"
                 style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-tertiary)' }}>
                 계좌번호 복사 ({clubAccount.bank_name} {clubAccount.account_number})
@@ -328,30 +341,20 @@ export default function SettlementDetailPage() {
             </div>
           )}
 
-          {myItem.status === 'unpaid' ? (
-            <button onClick={() => callStatusApi(myItem.id, 'request_confirm')}
-              className="w-full rounded-xl py-3 text-sm font-black btn-press"
-              style={{ background: 'var(--dku-blue-primary)', color: '#fff' }}>
-              송금했어요
-            </button>
-          ) : myItem.status === 'pending' ? (
-            <div className="flex flex-col gap-2">
-              <div className="rounded-xl p-3 text-center"
-                style={{ background: 'rgba(202,138,10,0.08)', border: '1px solid rgba(202,138,10,0.2)' }}>
-                <p className="text-xs font-black mb-0.5" style={{ color: 'var(--accent-yellow)' }}>
-                  확인 대기 중
-                </p>
-                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                  운영진이 확인 후 납부 완료 처리해요
-                </p>
-              </div>
-              <button onClick={() => callStatusApi(myItem.id, 'cancel_pending')}
-                className="w-full rounded-xl py-2.5 text-xs font-bold btn-press"
-                style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-hint)' }}>
-                취소 (잘못 눌렀어요)
-              </button>
+          {/* 상태별 안내 */}
+          {myItem.status === 'pending' && (
+            <div className="rounded-xl p-3 text-center"
+              style={{ background: 'rgba(202,138,10,0.08)', border: '1px solid rgba(202,138,10,0.2)' }}>
+              <p className="text-xs font-black mb-0.5" style={{ color: 'var(--accent-yellow)' }}>
+                입금 확인 중
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                입금이 감지됐어요. 금액 확인 후 자동으로 처리돼요.
+              </p>
             </div>
-          ) : (
+          )}
+
+          {myItem.status === 'paid' && (
             <div className="rounded-xl p-3 text-center"
               style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.2)' }}>
               <p className="text-sm font-black mb-0.5" style={{ color: 'var(--accent-green)' }}>
@@ -426,31 +429,41 @@ export default function SettlementDetailPage() {
                         {item.amount.toLocaleString()}원
                       </p>
                       {item.status === 'pending' && (
-                        <div className="flex gap-1">
-                          <button onClick={() => callStatusApi(item.id, 'mark_paid')}
-                            className="text-xs font-black px-2 py-1 rounded-lg btn-press"
-                            style={{ background: 'rgba(22,163,74,0.1)', color: 'var(--accent-green)' }}>
-                            확인
-                          </button>
-                          <button onClick={() => {
-                            setRejectingId(isRejecting ? null : item.id)
-                            setRejectReason('wrong_transfer_name')
-                          }}
-                            className="text-xs font-black px-2 py-1 rounded-lg btn-press"
-                            style={{ background: 'rgba(220,38,38,0.08)', color: 'var(--accent-red)' }}>
-                            반려
-                          </button>
-                        </div>
-                      )}
-                      {item.status === 'paid' && (
-                        <button onClick={() => {
-                          if (confirm('납부 확인을 취소할까요?')) callStatusApi(item.id, 'revert_unpaid')
-                        }}
-                          className="text-xs font-bold px-2 py-1 rounded-lg btn-press"
-                          style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-hint)' }}>
-                          되돌리기
-                        </button>
-                      )}
+  <div className="flex gap-1">
+    <button onClick={() => callStatusApi(item.id, 'mark_paid')}
+      className="text-xs font-black px-2 py-1 rounded-lg btn-press"
+      style={{ background: 'rgba(22,163,74,0.1)', color: 'var(--accent-green)' }}>
+      확인
+    </button>
+    <button onClick={() => {
+      setRejectingId(isRejecting ? null : item.id)
+      setRejectReason('wrong_transfer_name')
+    }}
+      className="text-xs font-black px-2 py-1 rounded-lg btn-press"
+      style={{ background: 'rgba(220,38,38,0.08)', color: 'var(--accent-red)' }}>
+      반려
+    </button>
+  </div>
+)}
+
+{/* unpaid 항목에 운영진 전용 입금 확인 버튼 */}
+{item.status === 'unpaid' && (isAdmin || isCreator) && (
+  <button onClick={() => callStatusApi(item.id, 'confirm_deposit')}
+    className="text-xs font-black px-2 py-1 rounded-lg btn-press"
+    style={{ background: 'rgba(202,138,10,0.1)', color: 'var(--accent-yellow)' }}>
+    입금 확인
+  </button>
+)}
+
+{item.status === 'paid' && (
+  <button onClick={() => {
+    if (confirm('납부 확인을 취소할까요?')) callStatusApi(item.id, 'revert_unpaid')
+  }}
+    className="text-xs font-bold px-2 py-1 rounded-lg btn-press"
+    style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-hint)' }}>
+    되돌리기
+  </button>
+)}
                     </div>
                   </div>
 
@@ -484,8 +497,10 @@ export default function SettlementDetailPage() {
                         className="w-full rounded-xl py-2.5 text-xs font-black btn-press"
                         style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)', color: 'var(--accent-red)' }}>
                         {rejectReason === 'wrong_transfer_name'
-                          ? '반려 처리 + "송금명오류" 복사 + 환불 송금'
-                          : '반려 처리 + 환불 송금'}
+                          ? '반려 처리 + "송금명불일치" 복사 + 환불 송금'
+                          : rejectReason === 'amount_mismatch'
+                          ? '반려 처리 + "금액불일치환급" 복사 + 환불 송금'
+                          : '반려 처리'}
                       </button>
                     </div>
                   )}
@@ -548,15 +563,6 @@ function RefundAccountPreview({
           style={{ background: '#fff', border: '1px solid var(--border-primary)', color: 'var(--text-secondary)' }}>
           복사
         </button>
-      </div>
-      <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--border-primary)' }}>
-        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
-          환불 송금명으로
-          <span className="font-black mx-1" style={{ color: 'var(--text-primary)' }}>
-            "송금명오류"
-          </span>
-          가 클립보드에 복사돼요
-        </p>
       </div>
     </div>
   ) : (
