@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { useProfile } from '@/contexts/ProfileContext'
@@ -62,6 +62,7 @@ export default function CampDetailPage() {
   const [selectedStart, setSelectedStart] = useState<string | null>(null)
   const [selectedEnd, setSelectedEnd] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [overlapError, setOverlapError] = useState<string | null>(null)
 
   const [guestMode, setGuestMode] = useState(false)
   const [guestName, setGuestName] = useState('')
@@ -70,9 +71,10 @@ export default function CampDetailPage() {
   const [guestLeaveDate, setGuestLeaveDate] = useState('')
   const [guestFee, setGuestFee] = useState('')
 
+  const today = new Date().toISOString().split('T')[0]
+
   const fetchData = useCallback(async () => {
     if (!profile) return
-
     const [{ data: campData }, { data: participantData }, { data: guestData }] =
       await Promise.all([
         supabase.from('camps').select('*').eq('id', id).single(),
@@ -137,6 +139,13 @@ export default function CampDetailPage() {
     return days
   }
 
+  // 중복 일정 체크
+  const hasOverlap = (start: string, end: string) => {
+    return myParticipations.some(p =>
+      !(end < p.join_date || start > p.leave_date)
+    )
+  }
+
   const handleDateTap = (date: string) => {
     if (!camp) return
     if (date < camp.start_date || date > camp.end_date) return
@@ -159,23 +168,34 @@ export default function CampDetailPage() {
       setSelectedStart(date)
       setSelectedEnd(null)
       setSelectStep('end')
+      setOverlapError(null)
     } else {
       if (date < selectedStart!) {
         setSelectedStart(date)
         setSelectedEnd(null)
         setSelectStep('end')
+        setOverlapError(null)
       } else {
         setSelectedEnd(date)
+        // 중복 체크
+        if (hasOverlap(selectedStart!, date)) {
+          setOverlapError('이미 신청한 일정과 겹쳐요')
+          setSelectedEnd(null)
+        } else {
+          setOverlapError(null)
+        }
       }
     }
   }
 
   const handleConfirmApply = async () => {
     if (!camp || !profile || !selectedStart || !selectedEnd) return
+    if (hasOverlap(selectedStart, selectedEnd)) {
+      setOverlapError('이미 신청한 일정과 겹쳐요')
+      return
+    }
     setSubmitting(true)
-
     const label = `${myParticipations.length + 1}차`
-
     await supabase.from('camp_participants').insert({
       camp_id: camp.id,
       user_id: profile.id,
@@ -185,11 +205,11 @@ export default function CampDetailPage() {
       label,
       status: 'confirmed',
     })
-
     setApplyMode(false)
     setSelectedStart(null)
     setSelectedEnd(null)
     setSelectStep('start')
+    setOverlapError(null)
     setSubmitting(false)
     fetchData()
   }
@@ -250,7 +270,7 @@ export default function CampDetailPage() {
   const selectedGuests = selectedDate ? getGuestsByDate(selectedDate) : []
 
   return (
-    <main className="max-w-lg mx-auto px-4 pb-40">
+    <main className="max-w-lg mx-auto px-4 pb-60">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">
         <Link href="/camp" className="text-xs font-semibold"
@@ -357,6 +377,7 @@ export default function CampDetailPage() {
                 if (!date) return <div key={`empty-${idx}`} />
 
                 const isCampDate = date >= camp.start_date && date <= camp.end_date
+                const isToday = date === today
                 const members = getMembersByDate(date)
                 const dayGuests = getGuestsByDate(date)
                 const total = members.length + dayGuests.length
@@ -374,6 +395,11 @@ export default function CampDetailPage() {
                 let borderRadius = '8px'
                 let scale = 1
                 let shadow = 'none'
+                let border = 'none'
+
+                if (isToday && !isSelected && !isStart && !isEnd && !isInApplyRange) {
+                  border = '2px solid var(--dku-blue-primary)'
+                }
 
                 if (applyMode) {
                   if (isStart && isEnd) {
@@ -405,6 +431,7 @@ export default function CampDetailPage() {
                       background: bg,
                       transform: `scale(${scale})`,
                       boxShadow: shadow,
+                      border,
                       transition: 'background 0.15s, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
                       opacity: isCampDate ? 1 : 0.2,
                       zIndex: scale > 1 ? 1 : 0,
@@ -415,6 +442,7 @@ export default function CampDetailPage() {
                       style={{
                         color: (isSelected || isStart || isEnd)
                           ? '#fff'
+                          : isToday ? 'var(--dku-blue-primary)'
                           : dayOfWeek === 0 ? 'var(--accent-red)'
                           : dayOfWeek === 6 ? 'var(--dku-blue)'
                           : 'var(--text-secondary)'
@@ -459,13 +487,17 @@ export default function CampDetailPage() {
               })}
             </div>
 
-            {/* 인디케이터 */}
+            {/* 인디케이터 — 월 네비게이션 위로 이동 */}
             {calendarMonths.length > 1 && (
-              <div className="flex justify-center gap-1.5 mt-4">
+              <div className="flex justify-center gap-1.5 mt-3 mb-1">
                 {calendarMonths.map((m, i) => (
                   <button key={i} onClick={() => setCurrentMonth(m)}
-                    className="w-1.5 h-1.5 rounded-full transition-colors"
-                    style={{ background: i === currentIdx ? 'var(--dku-blue-primary)' : 'var(--border-secondary)' }} />
+                    className="rounded-full transition-all duration-200"
+                    style={{
+                      width: i === currentIdx ? 16 : 6,
+                      height: 6,
+                      background: i === currentIdx ? 'var(--dku-blue-primary)' : 'var(--border-secondary)',
+                    }} />
                 ))}
               </div>
             )}
@@ -486,6 +518,14 @@ export default function CampDetailPage() {
             <span className="text-xs" style={{ color: 'var(--text-hint)' }}>{item.label}</span>
           </span>
         ))}
+        {/* 오늘 날짜 범례 */}
+        <span className="flex items-center gap-1">
+          <span className="w-4 h-4 rounded-full inline-block flex items-center justify-center text-[8px] font-black"
+            style={{ border: '2px solid var(--dku-blue-primary)', color: 'var(--dku-blue-primary)' }}>
+            오
+          </span>
+          <span className="text-xs" style={{ color: 'var(--text-hint)' }}>오늘</span>
+        </span>
       </div>
 
       {/* 날짜 상세 패널 */}
@@ -493,7 +533,7 @@ export default function CampDetailPage() {
         <>
           <div className="fixed inset-0 z-40"
             style={{ background: 'rgba(0,30,60,0.4)', backdropFilter: 'blur(4px)' }}
-            onClick={() => setShowPanel(false)} />
+            onClick={() => { setShowPanel(false); setSelectedDate(null) }} />
           <div className="fixed bottom-0 left-0 right-0 z-50 max-w-lg mx-auto"
             style={{
               background: '#ffffff',
@@ -512,12 +552,18 @@ export default function CampDetailPage() {
                   {new Date(selectedDate + 'T00:00:00').toLocaleDateString('ko-KR', {
                     month: 'long', day: 'numeric', weekday: 'long'
                   })}
+                  {selectedDate === today && (
+                    <span className="ml-2 text-xs font-black px-2 py-0.5 rounded-full"
+                      style={{ background: 'var(--ski-blue-50)', color: 'var(--dku-blue-primary)' }}>
+                      오늘
+                    </span>
+                  )}
                 </h2>
                 <div className="flex items-center gap-3">
                   <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
                     총 {selectedMembers.length + selectedGuests.length}명
                   </span>
-                  <button onClick={() => setShowPanel(false)}
+                  <button onClick={() => { setShowPanel(false); setSelectedDate(null) }}
                     className="text-lg leading-none" style={{ color: 'var(--text-hint)' }}>✕</button>
                 </div>
               </div>
@@ -718,24 +764,26 @@ export default function CampDetailPage() {
                 <div className="mb-3">
                   <p className="text-xs font-black tracking-widest uppercase mb-2"
                     style={{ color: 'var(--text-hint)' }}>내 참여 일정</p>
-                  <div className="flex flex-col gap-1.5">
+                  {/* 3개 이상이면 스크롤 */}
+                  <div className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: '120px' }}>
                     {myParticipations.map(p => {
-                      const n = getNights(p.join_date, p.leave_date)
+                      const nights = getNights(p.join_date, p.leave_date)
                       return (
                         <div key={p.id} className="flex items-center gap-2 rounded-xl px-3 py-2"
                           style={{ background: 'var(--ski-blue-50)', border: '1px solid var(--dku-blue-light)' }}>
-                          <span className="text-xs font-black px-1.5 py-0.5 rounded-full"
+                          <span className="text-xs font-black px-1.5 py-0.5 rounded-full flex-shrink-0"
                             style={{ background: 'var(--ski-blue-100)', color: 'var(--dku-blue-primary)' }}>
                             {p.label ?? '1차'}
                           </span>
                           <span className="text-xs font-bold flex-1" style={{ color: 'var(--dku-blue-primary)' }}>
                             {p.join_date.slice(5)} — {p.leave_date.slice(5)}
-                            <span className="font-normal ml-1" style={{ color: 'var(--text-hint)' }}>
-                              {n > 0 ? `${n}박` : '당일'}
-                            </span>
+                          </span>
+                          {/* 박수 표시 */}
+                          <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                            {nights > 0 ? `${nights}박` : '당일'}
                           </span>
                           <button onClick={() => handleDeleteParticipation(p.id)}
-                            className="text-xs" style={{ color: 'var(--accent-red)' }}>✕</button>
+                            className="text-xs flex-shrink-0" style={{ color: 'var(--accent-red)' }}>✕</button>
                         </div>
                       )
                     })}
@@ -747,6 +795,7 @@ export default function CampDetailPage() {
                 setSelectedStart(null)
                 setSelectedEnd(null)
                 setSelectStep('start')
+                setOverlapError(null)
                 setShowPanel(false)
               }}
                 className="w-full text-white rounded-xl py-3 text-sm font-black btn-press"
@@ -801,7 +850,17 @@ export default function CampDetailPage() {
                 </div>
               </div>
 
-              {selectedStart && selectedEnd && (
+              {/* 중복 에러 메시지 */}
+              {overlapError && (
+                <div className="rounded-xl px-3 py-2 mb-3 text-center"
+                  style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.15)' }}>
+                  <p className="text-xs font-bold" style={{ color: 'var(--accent-red)' }}>
+                    ⚠️ {overlapError}
+                  </p>
+                </div>
+              )}
+
+              {selectedStart && selectedEnd && !overlapError && (
                 <p className="text-xs text-center mb-3 font-black" style={{ color: 'var(--text-hint)' }}>
                   {getNights(selectedStart, selectedEnd) > 0
                     ? `${getNights(selectedStart, selectedEnd)}박 ${getNights(selectedStart, selectedEnd) + 1}일`
@@ -811,7 +870,7 @@ export default function CampDetailPage() {
 
               <div className="flex gap-2">
                 <button onClick={handleConfirmApply}
-                  disabled={submitting || !selectedStart || !selectedEnd}
+                  disabled={submitting || !selectedStart || !selectedEnd || !!overlapError}
                   className="flex-1 text-white rounded-xl py-3 text-sm font-black disabled:opacity-40 btn-press"
                   style={{ background: 'var(--dku-blue-primary)' }}>
                   {submitting ? '...' : '확정'}
@@ -821,6 +880,7 @@ export default function CampDetailPage() {
                   setSelectedStart(null)
                   setSelectedEnd(null)
                   setSelectStep('start')
+                  setOverlapError(null)
                 }}
                   className="rounded-xl px-4 py-3 text-sm font-black btn-press"
                   style={{ background: 'var(--surface-low)', border: '1px solid var(--border-primary)', color: 'var(--text-tertiary)' }}>
@@ -828,12 +888,22 @@ export default function CampDetailPage() {
                 </button>
               </div>
 
+              {/* 다시 선택 버튼 — 크고 눈에 띄게 */}
               {selectedStart && (
                 <button
-                  onClick={() => { setSelectedStart(null); setSelectedEnd(null); setSelectStep('start') }}
-                  className="w-full text-xs text-center mt-2 font-black"
-                  style={{ color: 'var(--text-hint)' }}>
-                  다시 선택
+                  onClick={() => {
+                    setSelectedStart(null)
+                    setSelectedEnd(null)
+                    setSelectStep('start')
+                    setOverlapError(null)
+                  }}
+                  className="w-full rounded-xl py-2.5 text-xs font-black mt-2 btn-press"
+                  style={{
+                    background: 'var(--surface-low)',
+                    border: '1px solid var(--border-primary)',
+                    color: 'var(--text-tertiary)',
+                  }}>
+                  ↺ 처음부터 다시 선택
                 </button>
               )}
             </div>
