@@ -1,4 +1,43 @@
-export default function PendingPage() {
+'use client'
+
+import { useEffect, useSearchParams } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
+import { Suspense } from 'react'
+
+function PendingContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const supabase = createClient()
+
+  useEffect(() => {
+    // redirect 파라미터 저장
+    const redirect = searchParams.get('redirect')
+    if (redirect) {
+      localStorage.setItem('pending_redirect', redirect)
+    }
+
+    // 10초마다 승인 상태 체크
+    const interval = setInterval(async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.role && profile.role !== 'pending') {
+        const savedRedirect = localStorage.getItem('pending_redirect')
+        localStorage.removeItem('pending_redirect')
+        router.push(savedRedirect ?? '/home')
+      }
+    }, 10000)
+
+    return () => clearInterval(interval)
+  }, [])
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-5"
       style={{ background: 'var(--surface)' }}>
@@ -65,5 +104,13 @@ export default function PendingPage() {
         </a>
       </div>
     </main>
+  )
+}
+
+export default function PendingPage() {
+  return (
+    <Suspense>
+      <PendingContent />
+    </Suspense>
   )
 }
