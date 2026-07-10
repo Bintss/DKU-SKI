@@ -53,6 +53,7 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
   const [canceling, setCanceling] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
 
   const [showSettlementPanel, setShowSettlementPanel] = useState(false)
   const [settlementLabel, setSettlementLabel] = useState('')
@@ -76,6 +77,13 @@ export default function EventDetailPage() {
 
   useEffect(() => { if (profile) fetchData() }, [profile, fetchData])
   usePageVisibilityRefetch(fetchData, { enabled: !!profile, debounceMs: 2000 })
+
+  const handleCopyLink = async () => {
+    const url = `${window.location.origin}/events/${id}`
+    await navigator.clipboard.writeText(url)
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 2000)
+  }
 
   const handleApply = async () => {
     if (!profile || !event) return
@@ -141,7 +149,6 @@ export default function EventDetailPage() {
     if (!confirm('참가를 취소할까요?')) return
     setCanceling(true)
 
-    // 연동된 정산 항목 조회
     const { data: settlements } = await supabase
       .from('settlements')
       .select('id')
@@ -158,11 +165,9 @@ export default function EventDetailPage() {
 
       for (const si of settlementItems ?? []) {
         if (si.status === 'unpaid') {
-          // 미납 → 정산 항목 삭제
           await supabase.from('settlement_items').delete().eq('id', si.id)
 
         } else if (si.status === 'pending') {
-          // 확인 중 → 반려 처리 + 운영진 알림
           await fetch('/api/settlement/status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -173,11 +178,8 @@ export default function EventDetailPage() {
             }),
           })
 
-          // 운영진 알림
           const { data: admins } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('role', 'admin')
+            .from('profiles').select('id').eq('role', 'admin')
           const adminIds = admins?.map(a => a.id) ?? []
 
           await fetch('/api/push/send', {
@@ -192,27 +194,19 @@ export default function EventDetailPage() {
           })
 
         } else if (si.status === 'paid') {
-          // 납부 완료 → 되돌리기 후 환불 요청 상태로
           await fetch('/api/settlement/status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              itemId: si.id,
-              action: 'revert_unpaid',
-            }),
+            body: JSON.stringify({ itemId: si.id, action: 'revert_unpaid' }),
           })
 
-          // reject_reason 업데이트
           await supabase
             .from('settlement_items')
             .update({ reject_reason: 'refund_requested' })
             .eq('id', si.id)
 
-          // 운영진 알림
           const { data: admins } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('role', 'admin')
+            .from('profiles').select('id').eq('role', 'admin')
           const adminIds = admins?.map(a => a.id) ?? []
 
           await fetch('/api/push/send', {
@@ -229,9 +223,7 @@ export default function EventDetailPage() {
       }
     }
 
-    // event_participants 삭제
     await supabase.from('event_participants').delete().eq('id', myParticipation.id)
-
     setCanceling(false)
     fetchData()
   }
@@ -253,11 +245,6 @@ export default function EventDetailPage() {
     setCreatingSettlement(true)
     setSettlementError('')
 
-    const targets = confirmedParticipants.map(p => ({
-      userId: p.user_id,
-      amount: event.participation_fee!,
-    }))
-
     const res = await fetch('/api/settlement/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -268,7 +255,10 @@ export default function EventDetailPage() {
         transferLabel: settlementLabel,
         dueDate: settlementDueDate || null,
         splitEqual: false,
-        targets,
+        targets: confirmedParticipants.map(p => ({
+          userId: p.user_id,
+          amount: event.participation_fee!,
+        })),
         eventId: event.id,
       }),
     })
@@ -329,20 +319,31 @@ export default function EventDetailPage() {
       <div className="flex items-center justify-between mb-4">
         <Link href="/events" className="text-xs font-semibold"
           style={{ color: 'var(--text-tertiary)' }}>← 행사</Link>
-        {(isAdmin || isCreator) && (
-          <div className="flex items-center gap-2">
-            <button onClick={handleDelete}
-              className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
-              style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)', color: 'var(--accent-red)' }}>
-              삭제
-            </button>
-            <a href={`/admin/events/${id}/edit`}
-              className="text-xs font-black text-white px-3 py-1.5 rounded-lg btn-press"
-              style={{ background: 'var(--dku-blue-primary)' }}>
-              수정
-            </a>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button onClick={handleCopyLink}
+            className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
+            style={{
+              background: linkCopied ? 'rgba(22,163,74,0.1)' : 'var(--surface-low)',
+              border: `1px solid ${linkCopied ? 'rgba(22,163,74,0.2)' : 'var(--border-primary)'}`,
+              color: linkCopied ? 'var(--accent-green)' : 'var(--text-tertiary)',
+            }}>
+            {linkCopied ? '복사됨 ✓' : '링크 복사'}
+          </button>
+          {(isAdmin || isCreator) && (
+            <>
+              <button onClick={handleDelete}
+                className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
+                style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)', color: 'var(--accent-red)' }}>
+                삭제
+              </button>
+              <a href={`/admin/events/${id}/edit`}
+                className="text-xs font-black text-white px-3 py-1.5 rounded-lg btn-press"
+                style={{ background: 'var(--dku-blue-primary)' }}>
+                수정
+              </a>
+            </>
+          )}
+        </div>
       </div>
 
       {/* 행사 헤더 */}
