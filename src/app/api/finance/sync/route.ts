@@ -62,45 +62,42 @@ export async function GET(req: NextRequest) {
 
     const transactions: BankTransaction[] = isMock
       ? [
-          // Case 1: 송금명 ✅ + 금액 ✅
-{
-  date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-  time: '130000',
-  displayName: '신정우합숙비',  // ← 변경
-  counterparty: '',
-  description: '이체',
-  amount: 9000,               // ← 정확한 금액
-  balance: 1000000,
-  type: 'deposit',
-  branch: '',
-  memo: '',
-},
-// Case 2: 송금명 ✅ + 금액 ❌
-{
-  date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-  time: '130100',
-  displayName: '차현우합숙비',  // ← 변경
-  counterparty: '',
-  description: '이체',
-  amount: 5000,               // ← 의도적으로 틀린 금액
-  balance: 1005000,
-  type: 'deposit',
-  branch: '',
-  memo: '',
-},
-// Case 3: 송금명 ❌ (그대로 유지)
-{
-  date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-  time: '130200',
-  displayName: '알수없는입금',
-  counterparty: '',
-  description: '이체',
-  amount: 50000,
-  balance: 1055000,
-  type: 'deposit',
-  branch: '',
-  memo: '',
-},
+          {
+            date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+            time: '140000',
+            displayName: '테스트합숙비',
+            counterparty: '',
+            description: '이체',
+            amount: 9000,
+            balance: 1000000,
+            type: 'deposit',
+            branch: '',
+            memo: '',
+          },
+          {
+            date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+            time: '140100',
+            displayName: '테스트회비',
+            counterparty: '',
+            description: '이체',
+            amount: 5000,
+            balance: 1005000,
+            type: 'deposit',
+            branch: '',
+            memo: '',
+          },
+          {
+            date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+            time: '140200',
+            displayName: '알수없는입금',
+            counterparty: '',
+            description: '이체',
+            amount: 50000,
+            balance: 1055000,
+            type: 'deposit',
+            branch: '',
+            memo: '',
+          },
         ]
       : await (async () => {
           const bankRes = await fetch('https://api.bankapi.co.kr/v1/transactions', {
@@ -174,7 +171,7 @@ export async function GET(req: NextRequest) {
         .select(`
           id, settlement_id, amount, user_id, transfer_name,
           profiles(name, refund_bank_name, refund_account_number, refund_account_holder),
-          settlements(title, transfer_label)
+          settlements(title, transfer_label, event_id)
         `)
         .eq('transfer_name', senderName)
         .eq('status', 'unpaid')
@@ -209,6 +206,16 @@ export async function GET(req: NextRequest) {
           })
           .eq('id', matchedItem.id)
 
+        // 행사 연동 정산이면 event_participants 확정
+        if (settlement?.event_id) {
+          await adminClient
+            .from('event_participants')
+            .update({ status: 'confirmed' })
+            .eq('event_id', settlement.event_id)
+            .eq('user_id', matchedItem.user_id)
+        }
+
+        // finance_transactions 자동 분류
         const accountInfo = LABEL_TO_CODE[transferLabel] ?? { code: '190', label: '기타수입' }
         await adminClient
           .from('finance_transactions')
@@ -237,7 +244,7 @@ export async function GET(req: NextRequest) {
         .from('settlement_items')
         .update({
           status: 'pending',
-          actual_amount: tx.amount,  // ← 실제 입금액 저장
+          actual_amount: tx.amount,
         })
         .eq('id', matchedItem.id)
 

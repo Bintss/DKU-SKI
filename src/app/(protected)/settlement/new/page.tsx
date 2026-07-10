@@ -20,6 +20,7 @@ export default function NewSettlementPage() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [totalAmount, setTotalAmount] = useState('')
+  const [transferLabel, setTransferLabel] = useState('')  // ← 복원
   const [dueDate, setDueDate] = useState('')
   const [members, setMembers] = useState<Member[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -87,6 +88,7 @@ export default function NewSettlementPage() {
     if (submitting) return
     if (selectedIds.length === 0) { setError('정산 대상을 선택해주세요'); return }
     if (!total) { setError('총 금액을 입력해주세요'); return }
+    if (!transferLabel.trim()) { setError('송금명을 입력해주세요'); return }  // ← 추가
     if (!splitEqual && customTotal !== total) {
       setError(`개별 금액 합계(${customTotal.toLocaleString()}원)가 총액(${total.toLocaleString()}원)과 달라요`)
       return
@@ -109,8 +111,13 @@ export default function NewSettlementPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title, description: description || null,
-        totalAmount: total, dueDate: dueDate || null, splitEqual, targets,
+        title,
+        description: description || null,
+        totalAmount: total,
+        transferLabel: transferLabel.trim(),  // ← 추가
+        dueDate: dueDate || null,
+        splitEqual,
+        targets,
       }),
     })
     const result = await res.json()
@@ -173,6 +180,23 @@ export default function NewSettlementPage() {
           <input type="text" placeholder="간단한 설명"
             value={description} onChange={e => setDescription(e.target.value)}
             style={inputStyle} />
+        </div>
+
+        {/* 송금명 복원 */}
+        <div>
+          <label className="text-xs font-black tracking-widest uppercase mb-1.5 block"
+            style={{ color: 'var(--text-hint)' }}>송금명</label>
+          <input type="text" placeholder="예: 합숙비, 티셔츠, 참가비 (최대 5자)"
+            value={transferLabel}
+            onChange={e => setTransferLabel(e.target.value.slice(0, 5))}
+            style={inputStyle} required />
+          <p className="text-xs mt-1.5" style={{ color: 'var(--text-hint)' }}>
+            부원 송금명: <span className="font-black" style={{ color: 'var(--dku-blue-primary)' }}>
+              {selectedIds.length > 0 && transferLabel
+                ? `홍길동${transferLabel} 형식으로 자동완성`
+                : '이름+송금명 형식으로 자동완성'}
+            </span>
+          </p>
         </div>
 
         <div>
@@ -302,6 +326,13 @@ export default function NewSettlementPage() {
                     <span className="text-xs ml-1.5" style={{ color: 'var(--text-hint)' }}>
                       {m.generation}기
                     </span>
+                    {/* 송금명 미리보기 */}
+                    {isSelected && transferLabel && (
+                      <span className="text-xs ml-1.5 font-black px-1.5 py-0.5 rounded"
+                        style={{ background: 'var(--ski-blue-100)', color: 'var(--dku-blue-primary)' }}>
+                        {(m.name + transferLabel).slice(0, 7)}
+                      </span>
+                    )}
                   </div>
                   {!splitEqual && isSelected && (
                     <input type="number" placeholder="금액"
