@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useSearchParams } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Suspense } from 'react'
 
