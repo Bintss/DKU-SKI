@@ -241,16 +241,29 @@ export default function EventDetailPage() {
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
       <div className="flex items-center justify-between mb-4">
-        <Link href="/events" className="text-xs font-semibold"
-          style={{ color: 'var(--text-tertiary)' }}>← 행사</Link>
-        {(isAdmin || isCreator) && (
-          <a href={`/admin/events/${id}/edit`}
-            className="text-xs font-black text-white px-3 py-1.5 rounded-lg btn-press"
-            style={{ background: 'var(--dku-blue-primary)' }}>
-            수정
-          </a>
-        )}
-      </div>
+  <Link href="/events" className="text-xs font-semibold"
+    style={{ color: 'var(--text-tertiary)' }}>← 행사</Link>
+  {(isAdmin || isCreator) && (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={async () => {
+          if (!confirm('이 행사를 삭제할까요? 되돌릴 수 없어요.')) return
+          await supabase.from('event_participants').delete().eq('event_id', id as string)
+          await supabase.from('events').delete().eq('id', id as string)
+          router.push('/events')
+        }}
+        className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
+        style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)', color: 'var(--accent-red)' }}>
+        삭제
+      </button>
+      <a href={`/admin/events/${id}/edit`}
+        className="text-xs font-black text-white px-3 py-1.5 rounded-lg btn-press"
+        style={{ background: 'var(--dku-blue-primary)' }}>
+        수정
+      </a>
+    </div>
+  )}
+</div>
 
       {/* 행사 헤더 */}
       {event.image_url && (
