@@ -35,8 +35,8 @@ export async function POST(req: NextRequest) {
     } = body
 
     if (!title || !totalAmount || !targets?.length) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-    }
+  return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+}
 
     const cookieStore = await cookies()
     const supabase = createServerClient(
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
 
       const name = profileMap[target.userId] ?? ''
       const combined = name + (transferLabel ?? '')
-      const transferName = combined.slice(0, 7)
+      const transferName = combined.length > 0 ? combined.slice(0, 7) : null
 
       return {
         settlement_id: settlement.id,
