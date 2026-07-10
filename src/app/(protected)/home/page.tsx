@@ -358,7 +358,7 @@ export default function HomePage() {
         ))}
       </div>
 
-      {/* 커뮤니티 미리보기 */}
+{/*   { 커뮤니티 미리보기 }
       <div className="fade-slide-up delay-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-black tracking-widest uppercase"
@@ -416,7 +416,7 @@ export default function HomePage() {
             ))}
           </div>
         )}
-      </div>
+      </div>*/}
     </main>
   )
 }

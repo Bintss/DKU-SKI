@@ -13,7 +13,7 @@ const NAV_ITEMS = [
   { href: '/events',     label: '행사' },
   { href: '/settlement', label: '정산' },
   { href: '/members',    label: '동문 찾기' },
-  { href: '/community',  label: '커뮤니티' },
+//  { href: '/community',  label: '커뮤니티' },
   { href: '/finance',    label: '재무 공시' },
 ]
 
