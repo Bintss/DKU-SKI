@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const redirect = searchParams.get('redirect') ?? '/home'
 
   if (code) {
     const cookieStore = await cookies()
@@ -25,7 +26,6 @@ export async function GET(request: Request) {
 
     await supabase.auth.exchangeCodeForSession(code)
 
-    // 프로필 확인 — generation이 0이면 추가 정보 입력 필요
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data: profile } = await supabase
@@ -35,10 +35,16 @@ export async function GET(request: Request) {
         .single()
 
       if (!profile || profile.generation === 0) {
-        return NextResponse.redirect(`${origin}/register/kakao`)
+        // 신규 가입 — redirect 파라미터 유지해서 가입 완료 후 돌아올 수 있게
+        const registerUrl = new URL('/register/kakao', origin)
+        if (redirect !== '/home') {
+          registerUrl.searchParams.set('redirect', redirect)
+        }
+        return NextResponse.redirect(registerUrl.toString())
       }
     }
   }
 
-  return NextResponse.redirect(`${origin}/home`)
+  // 로그인 완료 → redirect 파라미터 있으면 해당 URL로
+  return NextResponse.redirect(`${origin}${redirect}`)
 }

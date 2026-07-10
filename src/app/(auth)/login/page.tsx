@@ -1,21 +1,26 @@
 'use client'
 
 import { createClient } from '@/lib/supabase'
+import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function LoginPage() {
+function LoginContent() {
+  const searchParams = useSearchParams()
+
   const handleKakaoLogin = async () => {
     const supabase = createClient()
+    const redirect = searchParams.get('redirect') ?? '/home'
     await supabase.auth.signInWithOAuth({
       provider: 'kakao',
-      options: { redirectTo: `${window.location.origin}/auth/callback` }
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`
+      }
     })
   }
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-5"
       style={{ background: 'var(--surface)' }}>
-
-      {/* 로고 영역 */}
       <div className="flex flex-col items-center mb-12">
         <div className="mb-5">
           <img
@@ -33,7 +38,6 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* 로그인 영역 */}
       <div className="w-full max-w-sm">
         <button
           onClick={handleKakaoLogin}
@@ -50,12 +54,19 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* 하단 여백 */}
       <div className="mt-16 text-center">
         <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
           단국대학교 스키부 · 창립 40주년
         </p>
       </div>
     </main>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   )
 }

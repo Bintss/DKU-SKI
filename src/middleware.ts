@@ -36,7 +36,9 @@ export async function middleware(request: NextRequest) {
   )
 
   if (!user && isProtected) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('redirect', request.nextUrl.pathname)
+    return NextResponse.redirect(loginUrl)
   }
 
   if (user) {
@@ -46,7 +48,6 @@ export async function middleware(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    // 탈퇴한 회원은 강제 로그아웃 후 안내 페이지로
     if (
       profile?.role === 'withdrawn' &&
       !request.nextUrl.pathname.startsWith('/withdrawn') &&
@@ -62,7 +63,11 @@ export async function middleware(request: NextRequest) {
       !request.nextUrl.pathname.startsWith('/login') &&
       !request.nextUrl.pathname.startsWith('/register')
     ) {
-      return NextResponse.redirect(new URL('/pending', request.url))
+      // pending이어도 redirect 파라미터 유지
+      const pendingUrl = new URL('/pending', request.url)
+      const redirect = request.nextUrl.searchParams.get('redirect')
+      if (redirect) pendingUrl.searchParams.set('redirect', redirect)
+      return NextResponse.redirect(pendingUrl)
     }
   }
 
