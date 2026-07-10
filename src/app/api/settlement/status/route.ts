@@ -13,17 +13,13 @@ type SettlementItemRow = {
   is_paid: boolean
   transfer_name: string | null
   reject_reason: string | null
-  settlements: { title: string; created_by: string } | null
+  settlements: { title: string; created_by: string; event_id: string | null } | null
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const { itemId, action, rejectReason } = body
-    // action: 'confirm_deposit' (unpaid → pending, 운영진)
-    //       | 'mark_paid'       (pending → paid, 운영진)
-    //       | 'revert_unpaid'   (paid → unpaid, 운영진)
-    //       | 'reject'          (pending → unpaid + reject_reason, 운영진)
 
     const validActions = ['confirm_deposit', 'mark_paid', 'revert_unpaid', 'reject']
     if (!itemId || !validActions.includes(action)) {
@@ -55,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     const { data: item } = await adminClient
       .from('settlement_items')
-      .select('*, settlements(title, created_by)')
+      .select('*, settlements(title, created_by, event_id)')
       .eq('id', itemId)
       .single() as { data: SettlementItemRow | null }
 
@@ -75,7 +71,6 @@ export async function POST(req: NextRequest) {
 
     switch (action) {
       case 'confirm_deposit':
-        // 운영진이 수동으로 입금 확인 (Case 3 — 송금명 불일치)
         if (item.status !== 'unpaid') {
           return NextResponse.json({ error: 'Invalid state transition' }, { status: 400 })
         }
@@ -137,9 +132,19 @@ export async function POST(req: NextRequest) {
 
     const settlementTitle = item.settlements?.title ?? '정산'
     const settlementId = item.settlement_id
+    const eventId = item.settlements?.event_id ?? null
 
-    // 납부 확인 완료 알림
+    // mark_paid — 납부 확인 완료
     if (action === 'mark_paid') {
+      // 행사 연동 정산이면 event_participants 확정
+      if (eventId) {
+        await adminClient
+          .from('event_participants')
+          .update({ status: 'confirmed' })
+          .eq('event_id', eventId)
+          .eq('user_id', item.user_id)
+      }
+
       sendToUsers(
         adminClient,
         [item.user_id],
@@ -149,7 +154,16 @@ export async function POST(req: NextRequest) {
       ).catch(err => console.error('push send error:', err))
     }
 
-    // 입금 확인 알림 (운영진이 수동 pending 전환)
+    // revert_unpaid — 행사 참가자도 pending_payment로 되돌리기
+    if (action === 'revert_unpaid' && eventId) {
+      await adminClient
+        .from('event_participants')
+        .update({ status: 'pending_payment' })
+        .eq('event_id', eventId)
+        .eq('user_id', item.user_id)
+    }
+
+    // confirm_deposit — 입금 확인 알림
     if (action === 'confirm_deposit') {
       sendToUsers(
         adminClient,

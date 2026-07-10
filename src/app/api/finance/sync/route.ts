@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
       ? [
           {
         date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-        time: '150000',
+        time: '160000',
         displayName: '신정우a01',   // ← 실제 transfer_name
         counterparty: '',
         description: '이체',
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       },
           {
             date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-            time: '140100',
+            time: '160100',
             displayName: '테스트회비',
             counterparty: '',
             description: '이체',
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
           },
           {
             date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-            time: '140200',
+            time: '160200',
             displayName: '알수없는입금',
             counterparty: '',
             description: '이체',
@@ -166,16 +166,18 @@ export async function GET(req: NextRequest) {
       const senderName = tx.displayName?.trim()
       if (!senderName) continue
 
-      const { data: matchedItem } = await adminClient
-        .from('settlement_items')
-        .select(`
-          id, settlement_id, amount, user_id, transfer_name,
-          profiles(name, refund_bank_name, refund_account_number, refund_account_holder),
-          settlements(title, transfer_label, event_id)
-        `)
-        .eq('transfer_name', senderName)
-        .eq('status', 'unpaid')
-        .single()
+      const { data: matchedItems } = await adminClient
+  .from('settlement_items')
+  .select(`
+    id, settlement_id, amount, user_id, transfer_name,
+    profiles(name, refund_bank_name, refund_account_number, refund_account_holder),
+    settlements(title, transfer_label, event_id)
+  `)
+  .eq('transfer_name', senderName)
+  .eq('status', 'unpaid')
+  .limit(1)
+
+const matchedItem = matchedItems?.[0] ?? null
 
       // Case 3: 송금명 매칭 안 됨
       if (!matchedItem) {
