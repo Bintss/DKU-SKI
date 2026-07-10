@@ -54,7 +54,6 @@ export default function EventDetailPage() {
   const [applying, setApplying] = useState(false)
   const [canceling, setCanceling] = useState(false)
 
-  // 운영진 정산 생성
   const [showSettlementPanel, setShowSettlementPanel] = useState(false)
   const [settlementLabel, setSettlementLabel] = useState('')
   const [settlementDueDate, setSettlementDueDate] = useState('')
@@ -78,14 +77,11 @@ export default function EventDetailPage() {
   useEffect(() => { if (profile) fetchData() }, [profile, fetchData])
   usePageVisibilityRefetch(fetchData, { enabled: !!profile, debounceMs: 2000 })
 
-  // 참가 신청
   const handleApply = async () => {
     if (!profile || !event) return
     setApplying(true)
 
-    // 참가비 있는 경우
     if (event.participation_fee && event.participation_fee > 0) {
-      // event_participants 생성 (pending_payment)
       const { error: participantError } = await supabase
         .from('event_participants')
         .insert({
@@ -101,7 +97,6 @@ export default function EventDetailPage() {
         return
       }
 
-      // 정산 자동 생성
       const label = event.transfer_label || '참가비'
       const res = await fetch('/api/settlement/create', {
         method: 'POST',
@@ -122,13 +117,13 @@ export default function EventDetailPage() {
       })
 
       if (!res.ok) {
-        alert(`정산 생성에 실패했어요`)
+        const result = await res.json()
+        alert(`정산 생성에 실패했어요: ${JSON.stringify(result)}`)
         setApplying(false)
         return
       }
 
     } else {
-      // 참가비 없는 경우 — 즉시 confirmed
       await supabase.from('event_participants').insert({
         event_id: event.id,
         user_id: profile.id,
@@ -141,23 +136,106 @@ export default function EventDetailPage() {
     fetchData()
   }
 
-  // 참가 취소
   const handleCancel = async () => {
-    if (!myParticipation || !profile) return
+    if (!myParticipation || !profile || !event) return
     if (!confirm('참가를 취소할까요?')) return
     setCanceling(true)
 
-    // pending_payment 상태면 안내
-    if (myParticipation.status === 'pending_payment') {
-      alert('참가비 정산이 생성되어 있어요. 정산 페이지에서 운영진에게 환불을 요청해주세요.')
+    // 연동된 정산 항목 조회
+    const { data: settlements } = await supabase
+      .from('settlements')
+      .select('id')
+      .eq('event_id', event.id)
+
+    const settlementIds = settlements?.map(s => s.id) ?? []
+
+    if (settlementIds.length > 0) {
+      const { data: settlementItems } = await supabase
+        .from('settlement_items')
+        .select('id, status, amount')
+        .eq('user_id', profile.id)
+        .in('settlement_id', settlementIds)
+
+      for (const si of settlementItems ?? []) {
+        if (si.status === 'unpaid') {
+          // 미납 → 정산 항목 삭제
+          await supabase.from('settlement_items').delete().eq('id', si.id)
+
+        } else if (si.status === 'pending') {
+          // 확인 중 → 반려 처리 + 운영진 알림
+          await fetch('/api/settlement/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              itemId: si.id,
+              action: 'reject',
+              rejectReason: 'refund_requested',
+            }),
+          })
+
+          // 운영진 알림
+          const { data: admins } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('role', 'admin')
+          const adminIds = admins?.map(a => a.id) ?? []
+
+          await fetch('/api/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userIds: adminIds,
+              title: '⚠️ 참가 취소 — 환불 필요',
+              body: `${profile.name}님이 "${event.title}" 참가를 취소했어요. ${si.amount.toLocaleString()}원 환불이 필요해요.`,
+              url: `/settlement`,
+            }),
+          })
+
+        } else if (si.status === 'paid') {
+          // 납부 완료 → 되돌리기 후 환불 요청 상태로
+          await fetch('/api/settlement/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              itemId: si.id,
+              action: 'revert_unpaid',
+            }),
+          })
+
+          // reject_reason 업데이트
+          await supabase
+            .from('settlement_items')
+            .update({ reject_reason: 'refund_requested' })
+            .eq('id', si.id)
+
+          // 운영진 알림
+          const { data: admins } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('role', 'admin')
+          const adminIds = admins?.map(a => a.id) ?? []
+
+          await fetch('/api/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userIds: adminIds,
+              title: '⚠️ 참가 취소 — 환불 필요',
+              body: `${profile.name}님이 "${event.title}" 참가를 취소했어요. 납부한 ${si.amount.toLocaleString()}원 환불이 필요해요.`,
+              url: `/settlement`,
+            }),
+          })
+        }
+      }
     }
 
+    // event_participants 삭제
     await supabase.from('event_participants').delete().eq('id', myParticipation.id)
+
     setCanceling(false)
     fetchData()
   }
 
-  // 운영진 정산 생성 (참가비 없는 행사에서 수동)
   const handleCreateSettlement = async () => {
     if (!event || !profile) return
     if (!settlementLabel.trim()) { setSettlementError('송금명을 입력해주세요'); return }
@@ -207,6 +285,13 @@ export default function EventDetailPage() {
     router.push(`/settlement/${result.settlementId}`)
   }
 
+  const handleDelete = async () => {
+    if (!confirm('이 행사를 삭제할까요? 되돌릴 수 없어요.')) return
+    await supabase.from('event_participants').delete().eq('event_id', id as string)
+    await supabase.from('events').delete().eq('id', id as string)
+    router.push('/events')
+  }
+
   const isAdmin = profile?.role === 'admin'
   const isCreator = event?.created_by === profile?.id
   const canApply = event?.is_open &&
@@ -240,30 +325,25 @@ export default function EventDetailPage() {
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-10">
+      {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">
-  <Link href="/events" className="text-xs font-semibold"
-    style={{ color: 'var(--text-tertiary)' }}>← 행사</Link>
-  {(isAdmin || isCreator) && (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={async () => {
-          if (!confirm('이 행사를 삭제할까요? 되돌릴 수 없어요.')) return
-          await supabase.from('event_participants').delete().eq('event_id', id as string)
-          await supabase.from('events').delete().eq('id', id as string)
-          router.push('/events')
-        }}
-        className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
-        style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)', color: 'var(--accent-red)' }}>
-        삭제
-      </button>
-      <a href={`/admin/events/${id}/edit`}
-        className="text-xs font-black text-white px-3 py-1.5 rounded-lg btn-press"
-        style={{ background: 'var(--dku-blue-primary)' }}>
-        수정
-      </a>
-    </div>
-  )}
-</div>
+        <Link href="/events" className="text-xs font-semibold"
+          style={{ color: 'var(--text-tertiary)' }}>← 행사</Link>
+        {(isAdmin || isCreator) && (
+          <div className="flex items-center gap-2">
+            <button onClick={handleDelete}
+              className="text-xs font-black px-3 py-1.5 rounded-lg btn-press"
+              style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)', color: 'var(--accent-red)' }}>
+              삭제
+            </button>
+            <a href={`/admin/events/${id}/edit`}
+              className="text-xs font-black text-white px-3 py-1.5 rounded-lg btn-press"
+              style={{ background: 'var(--dku-blue-primary)' }}>
+              수정
+            </a>
+          </div>
+        )}
+      </div>
 
       {/* 행사 헤더 */}
       {event.image_url && (
@@ -319,7 +399,6 @@ export default function EventDetailPage() {
           </p>
         )}
 
-        {/* 참가비 안내 */}
         {event.participation_fee && event.participation_fee > 0 && (
           <div className="mt-3 pt-3 flex items-center justify-between"
             style={{ borderTop: '1px solid var(--border-primary)' }}>
@@ -347,7 +426,6 @@ export default function EventDetailPage() {
           </button>
         ) : (
           <div>
-            {/* 내 신청 상태 */}
             <div className="rounded-xl p-4 mb-3"
               style={{
                 background: myParticipation.status === 'confirmed'
@@ -394,9 +472,7 @@ export default function EventDetailPage() {
         style={{ background: '#fff', border: '1px solid var(--border-primary)', boxShadow: 'var(--shadow-sm)' }}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-black tracking-widest uppercase"
-            style={{ color: 'var(--text-hint)' }}>
-            참가자
-          </h2>
+            style={{ color: 'var(--text-hint)' }}>참가자</h2>
           <div className="flex items-center gap-2">
             <span className="text-xs font-black px-2 py-0.5 rounded-full"
               style={{ background: 'rgba(22,163,74,0.1)', color: 'var(--accent-green)' }}>
@@ -437,7 +513,6 @@ export default function EventDetailPage() {
                     </span>
                   </p>
                 </div>
-                {/* 납부 상태 표시 */}
                 <span className="text-xs font-black px-2 py-0.5 rounded-full flex-shrink-0"
                   style={{
                     background: p.status === 'confirmed'
@@ -477,7 +552,6 @@ export default function EventDetailPage() {
           {showSettlementPanel && (
             <div className="px-5 pb-5"
               style={{ borderTop: '1px solid var(--dku-blue-light)' }}>
-
               {event.participation_fee && event.participation_fee > 0 ? (
                 <div className="mt-4">
                   <div className="rounded-xl p-3 mb-3"
