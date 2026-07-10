@@ -71,7 +71,8 @@ export default function FinancePage() {
     setTransactions(allTx)
     setDepositAccounts(depositData ?? [])
 
-    // 계정코드별 집계 — 수입/지출 모두 양수로 누적
+    // 홈화면과 동일한 집계 방식
+    // 수입: 양수 그대로 누적 / 지출: 음수 그대로 누적
     const grouped: Record<string, AccountSummary> = {}
     for (const tx of allTx) {
       if (!tx.account_code) continue
@@ -91,15 +92,14 @@ export default function FinancePage() {
           count: 0,
         }
       }
-      // 수입/지출 모두 양수로 누적 (홈화면과 동일한 방식)
-      grouped[groupKey].amount += Math.abs(tx.amount)
+      grouped[groupKey].amount += tx.amount
       grouped[groupKey].count += 1
     }
 
     setSummary(
       Object.values(grouped).sort((a, b) =>
         a.type === b.type
-          ? b.amount - a.amount
+          ? Math.abs(b.amount) - Math.abs(a.amount)
           : a.type === 'income' ? -1 : 1
       )
     )
@@ -109,20 +109,20 @@ export default function FinancePage() {
   useEffect(() => { fetchData() }, [fetchData])
   usePageVisibilityRefetch(fetchData, { enabled: !!season, debounceMs: 5000 })
 
-  // 수입/지출 모두 양수로 누적됐으니 그대로 합산
+  // 홈화면과 동일한 총합 계산
   const totalIncome = summary
     .filter(s => s.type === 'income')
     .reduce((sum, s) => sum + s.amount, 0)
 
   const totalExpense = summary
     .filter(s => s.type === 'expense')
-    .reduce((sum, s) => sum + s.amount, 0)
+    .reduce((sum, s) => sum + Math.abs(s.amount), 0)
 
   const balance = totalIncome - totalExpense
   const totalDeposit = depositAccounts.reduce((s, a) => s + a.balance, 0)
   const totalAsset = balance + totalDeposit
 
-  const fmt = (n: number) => new Intl.NumberFormat('ko-KR').format(n) + '원'
+  const fmt = (n: number) => new Intl.NumberFormat('ko-KR').format(Math.abs(n)) + '원'
 
   const formatLastUpdated = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString('ko-KR', {
@@ -332,14 +332,14 @@ export default function FinancePage() {
                           <span className="text-xs" style={{ color: 'var(--text-hint)' }}>{s.count}건</span>
                         </span>
                         <span className="font-black" style={{ color: 'var(--accent-red)' }}>
-                          -{fmt(s.amount)}
+                          -{fmt(Math.abs(s.amount))}
                         </span>
                       </div>
                       <div className="h-1 rounded-full overflow-hidden"
                         style={{ background: 'var(--surface-low)' }}>
                         <div className="h-full rounded-full transition-all"
                           style={{
-                            width: `${totalExpense > 0 ? (s.amount / totalExpense) * 100 : 0}%`,
+                            width: `${totalExpense > 0 ? (Math.abs(s.amount) / totalExpense) * 100 : 0}%`,
                             background: isActive ? 'var(--accent-red)' : 'rgba(220,38,38,0.25)',
                           }} />
                       </div>
@@ -416,7 +416,7 @@ export default function FinancePage() {
                     </div>
                     <p className="text-sm font-black flex-shrink-0"
                       style={{ color: isIncome ? 'var(--dku-blue-primary)' : 'var(--accent-red)' }}>
-                      {isIncome ? '+' : '-'}{fmt(Math.abs(tx.amount))}
+                      {isIncome ? '+' : '-'}{fmt(tx.amount)}
                     </p>
                   </div>
                 )
