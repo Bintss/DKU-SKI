@@ -96,7 +96,7 @@ export default function EventDetailPage() {
         })
 
       if (participantError) {
-        alert('참가 신청에 실패했어요')
+        alert(`참가 신청에 실패했어요: ${participantError.message}`)
         setApplying(false)
         return
       }
@@ -122,7 +122,7 @@ export default function EventDetailPage() {
       })
 
       if (!res.ok) {
-        alert('정산 생성에 실패했어요')
+        alert(`정산 생성에 실패했어요`)
         setApplying(false)
         return
       }
