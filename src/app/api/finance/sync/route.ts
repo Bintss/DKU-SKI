@@ -63,17 +63,17 @@ export async function GET(req: NextRequest) {
     const transactions: BankTransaction[] = isMock
       ? [
           {
-            date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-            time: '140000',
-            displayName: '테스트합숙비',
-            counterparty: '',
-            description: '이체',
-            amount: 9000,
-            balance: 1000000,
-            type: 'deposit',
-            branch: '',
-            memo: '',
-          },
+        date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+        time: '150000',
+        displayName: '신정우a01',   // ← 실제 transfer_name
+        counterparty: '',
+        description: '이체',
+        amount: 10000,              // ← 실제 amount
+        balance: 1000000,
+        type: 'deposit',
+        branch: '',
+        memo: '',
+      },
           {
             date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
             time: '140100',
