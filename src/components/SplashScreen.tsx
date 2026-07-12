@@ -5,7 +5,7 @@ export default function SplashScreen() {
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center"
       style={{
-        backgroundImage: 'url(/splash.png)',
+        backgroundImage: 'url(/splash_1.png)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         animation: 'splashFadeOut 0.5s ease forwards',
