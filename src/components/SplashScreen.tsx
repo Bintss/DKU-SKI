@@ -17,7 +17,7 @@ export default function SplashScreen() {
         }
       `}</style>
       <img
-        src="/splash_1.png"
+        src="/back_image.png"
         alt="DKU SKI"
         style={{
           width: '70%',
