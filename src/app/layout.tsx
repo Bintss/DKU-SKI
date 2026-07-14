@@ -34,17 +34,26 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body style={{
-        background: '#F9F9FF',
-        backgroundImage: 'url(/back_image.png)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed',
-        backgroundRepeat: 'no-repeat',
-        minHeight: '100vh',
-      }}>
-        <ServiceWorkerRegister />
-        {children}
-      </body>
+  backgroundImage: 'url(/back_image.png)',
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  backgroundAttachment: 'fixed',
+  backgroundRepeat: 'no-repeat',
+  minHeight: '100vh',
+}}>
+  {/* 반투명 오버레이 */}
+  <div style={{
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(249,249,255,0.85)',
+    zIndex: 0,
+    pointerEvents: 'none',
+  }} />
+  <div style={{ position: 'relative', zIndex: 1 }}>
+    <ServiceWorkerRegister />
+    {children}
+  </div>
+</body>
     </html>
   )
 }
