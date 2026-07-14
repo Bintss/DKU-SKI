@@ -33,7 +33,15 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body style={{ background: '#F9F9FF' }}>
+      <body style={{
+        background: '#F9F9FF',
+        backgroundImage: 'url(/back_image.png)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+        backgroundRepeat: 'no-repeat',
+        minHeight: '100vh',
+      }}>
         <ServiceWorkerRegister />
         {children}
       </body>
