@@ -33,27 +33,23 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body style={{
-  backgroundImage: 'url(/back_image.png)',
-  backgroundSize: 'cover',
-  backgroundPosition: 'center',
-  backgroundAttachment: 'fixed',
-  backgroundRepeat: 'no-repeat',
-  minHeight: '100vh',
-}}>
-  {/* 반투명 오버레이 */}
-  <div style={{
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(249,249,255,0.85)',
-    zIndex: 0,
-    pointerEvents: 'none',
-  }} />
-  <div style={{ position: 'relative', zIndex: 1 }}>
-    <ServiceWorkerRegister />
-    {children}
-  </div>
-</body>
+      <body style={{ background: '#F9F9FF', minHeight: '100vh', position: 'relative' }}>
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundImage: 'url(/back_image.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          opacity: 0.08,
+          zIndex: 0,
+          pointerEvents: 'none',
+        }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <ServiceWorkerRegister />
+          {children}
+        </div>
+      </body>
     </html>
   )
 }
