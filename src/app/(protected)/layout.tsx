@@ -37,9 +37,7 @@ export default function ProtectedLayout({
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center"
           style={{
-            backgroundImage: 'url(/splash-logo.jpg)',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            background: '#fff',
             animation: 'splashFadeOut 1.8s ease-in-out forwards',
           }}
         >
@@ -51,10 +49,28 @@ export default function ProtectedLayout({
               100% { opacity: 0; transform: scale(1.02); }
             }
           `}</style>
+          <img
+            src="/back_image.png"
+            alt="DKU SKI"
+            style={{ width: '65%', maxWidth: 360, objectFit: 'contain' }}
+          />
         </div>
       )}
 
-      <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
+      {/* 배경 이미지 워터마크 */}
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundImage: 'url(/back_image.png)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        opacity: 0.06,
+        zIndex: 0,
+        pointerEvents: 'none',
+      }} />
+
+      <div className="min-h-screen" style={{ background: 'transparent', position: 'relative', zIndex: 1 }}>
         <Header />
         <div
           style={{

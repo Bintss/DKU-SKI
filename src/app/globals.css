@@ -54,7 +54,6 @@
 * { -webkit-tap-highlight-color: transparent; }
 
 html, body {
-  background: var(--surface);
   color: var(--text-primary);
 }
 
